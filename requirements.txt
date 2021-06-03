@@ -1,0 +1,6 @@
+# torch / torchvision installation is done separately
+
+matplotlib
+nibabel
+numpy
+tqdm
