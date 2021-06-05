@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import nibabel
 import numpy as np
 import torch
+from torch import nn
+from torch import optim
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 from tqdm import tqdm
@@ -17,11 +19,13 @@ class AgePredictionDataset(Dataset):
         rows = []
 
         for fname in split_fnames:
-            split_num = int(file[:-len('.list')].split('_')[-1])
+            split_num = int(fname[:-len('.list')].split('_')[-1])
             with open(fname, 'r') as file:
-                lines = file.read()
+                lines = file.read().splitlines()
                 for line in lines:
                     id, age, sex, path = line.split(' ')
+                    path = path.replace('/ABIDE/', '/ABIDE_I/')
+                    path = path.replace('/NIH-PD/', '/NIH_PD/')
                     rows.append((id, float(age), sex, path))
 
         self.rows = rows
@@ -30,6 +34,9 @@ class AgePredictionDataset(Dataset):
         id, age, sex, path = self.rows[idx]
         image = nibabel.load(path).get_fdata()
         return (image, age)
+
+    def __len__(self):
+        return len(self.rows)
 
 def parse_options():
     parser = argparse.ArgumentParser()
@@ -87,12 +94,14 @@ def main():
     assert len(split_fnames) == 5
 
     model = models.resnet18()
-    optimizer = torch.optim.SGD(
+    # Set the number of input channels to 240
+    model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    optimizer = optim.SGD(
         model.parameters(),
         lr=opts.learning_rate,
         momentum=opts.momentum,
         weight_decay=opts.weight_decay)
-    criterion = torch.nn.L1Loss(reduction='mean')
+    criterion = nn.L1Loss(reduction='mean')
 
     train_dataset = AgePredictionDataset(split_fnames[:4])
     val_dataset = AgePredictionDataset(split_fnames[4:])
