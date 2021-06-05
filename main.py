@@ -56,17 +56,16 @@ def train(model, optimizer, criterion, train_loader):
     losses = []
 
     for batch_idx, (images, ages) in tqdm(enumerate(train_loader), total=len(train_loader)):
+        images, ages = images.cuda(), ages.cuda()
         optimizer.zero_grad()
-        age_preds = model(images)
+        age_preds = model(images).view(-1)
         loss = criterion(age_preds, ages)
         loss.backward()
         optimizer.step()
 
         losses.append(loss.item())
-        """
         if batch_idx % 10 == 0:
-            print(f"batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
-        """
+            print(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
     
     return np.mean(losses)
 
@@ -77,7 +76,8 @@ def validate(model, criterion, val_loader):
 
     with torch.no_grad():
         for (images, ages) in tqdm(val_loader, total=len(val_loader)):
-            age_preds = model(images)
+            images, ages = images.cuda(), ages.cuda()
+            age_preds = model(images).view(-1)
             loss = criterion(age_preds, ages)
 
             losses.append(loss.item())
@@ -97,6 +97,7 @@ def main():
     # Set the number of input channels to 240
     model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
     model.double()
+    model.cuda()
     optimizer = optim.SGD(
         model.parameters(),
         lr=opts.learning_rate,
