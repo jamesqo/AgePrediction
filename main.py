@@ -93,9 +93,10 @@ def main():
     split_fnames = glob.glob(f"{SCRIPT_DIR}/folderlist/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
-    model = models.resnet18()
+    model = models.resnet18(num_classes=1)
     # Set the number of input channels to 240
     model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    model.double()
     optimizer = optim.SGD(
         model.parameters(),
         lr=opts.learning_rate,
