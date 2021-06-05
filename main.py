@@ -10,7 +10,6 @@ from torch import nn
 from torch import optim
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
-from tqdm import tqdm
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -55,7 +54,7 @@ def train(model, optimizer, criterion, train_loader):
 
     losses = []
 
-    for batch_idx, (images, ages) in tqdm(enumerate(train_loader), total=len(train_loader)):
+    for batch_idx, (images, ages) in enumerate(train_loader):
         images, ages = images.cuda(), ages.cuda()
         optimizer.zero_grad()
         age_preds = model(images).view(-1)
@@ -75,7 +74,7 @@ def validate(model, criterion, val_loader):
     losses = []
 
     with torch.no_grad():
-        for (images, ages) in tqdm(val_loader, total=len(val_loader)):
+        for (images, ages) in val_loader:
             images, ages = images.cuda(), ages.cuda()
             age_preds = model(images).view(-1)
             loss = criterion(age_preds, ages)
