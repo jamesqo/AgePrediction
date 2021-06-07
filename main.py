@@ -32,6 +32,7 @@ class AgePredictionDataset(Dataset):
     def __getitem__(self, idx):
         id, age, sex, path = self.rows[idx]
         image = nibabel.load(path).get_fdata()
+        image /= np.percentile(image, 95) # Normalize intensity
         return (image, age)
 
     def __len__(self):
@@ -92,6 +93,8 @@ def main():
     split_fnames = glob.glob(f"{SCRIPT_DIR}/folderlist/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
+    print("Setting up model")
+
     model = models.resnet18(num_classes=1)
     # Set the number of input channels to 240
     model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -111,6 +114,8 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
     ## Training process
+
+    print("Starting training process")
 
     best_epoch = None
     best_val_loss = np.inf
