@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import glob
 import os
 
@@ -12,6 +13,11 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+LOG_FILE = f"{SCRIPT_DIR}/logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+def log(message):
+    with open(LOG_FILE, 'a+') as log_file:
+        log_file.write(f"{message}\n")
 
 class AgePredictionDataset(Dataset):
     def __init__(self, split_fnames):
@@ -44,9 +50,8 @@ def parse_options():
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--n-epochs', type=int, default=30)
 
-    parser.add_argument('--learning-rate', type=float, default=1e-2)
-    parser.add_argument('--momentum', type=float, default=0.9)
-    parser.add_argument('--weight-decay', type=float, default=1e-4)
+    parser.add_argument('--learning-rate', type=float, default=1e-3)
+    parser.add_argument('--weight-decay', type=float, default=1e-6)
 
     return parser.parse_args()
 
@@ -65,7 +70,7 @@ def train(model, optimizer, criterion, train_loader):
 
         losses.append(loss.item())
         if batch_idx % 10 == 0:
-            print(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
+            log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
     
     return np.mean(losses)
 
@@ -93,18 +98,14 @@ def main():
     split_fnames = glob.glob(f"{SCRIPT_DIR}/folderlist/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
-    print("Setting up model")
+    log("Setting up model")
 
     model = models.resnet18(num_classes=1)
     # Set the number of input channels to 240
     model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
     model.double()
     model.cuda()
-    optimizer = optim.SGD(
-        model.parameters(),
-        lr=opts.learning_rate,
-        momentum=opts.momentum,
-        weight_decay=opts.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     criterion = nn.L1Loss(reduction='mean')
 
     train_dataset = AgePredictionDataset(split_fnames[:4])
@@ -115,7 +116,7 @@ def main():
 
     ## Training process
 
-    print("Starting training process")
+    log("Starting training process")
 
     best_epoch = None
     best_val_loss = np.inf
@@ -123,11 +124,11 @@ def main():
     val_losses = []
 
     for epoch in range(opts.n_epochs):
-        print(f"Epoch {epoch}/{opts.n_epochs}")
+        log(f"Epoch {epoch}/{opts.n_epochs}")
         train_loss = train(model, optimizer, criterion, train_loader)
-        print(f"Mean training loss: {train_loss}")
+        log(f"Mean training loss: {train_loss}")
         val_loss = validate(model, criterion, val_loader)
-        print(f"Mean validation loss: {val_loss}")
+        log(f"Mean validation loss: {val_loss}")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -137,9 +138,11 @@ def main():
             best_epoch = epoch
             best_val_loss = val_loss
     
-    print(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
+    log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
 
     ## Plotting
+
+    log("Generating plots")
 
     epochs = range(opts.n_epochs)
     plt.plot(epochs, train_losses)

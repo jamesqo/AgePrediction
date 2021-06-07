@@ -4,7 +4,7 @@
 #SBATCH --time=36:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:Titan_RTX:1
-#SBATCH --output=slurm.out
+#SBATCH --output=logs/slurm.out
 
 module load anaconda3
 source activate james
