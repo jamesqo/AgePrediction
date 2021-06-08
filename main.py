@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime
 import glob
 import os
+import random
 
 import matplotlib.pyplot as plt
 import nibabel
@@ -9,6 +10,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch import optim
+from torch.utils import data
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 
@@ -90,6 +92,10 @@ def validate(model, criterion, val_loader):
     return np.mean(losses)
 
 def main():
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+
     opts = parse_options()
     
     os.makedirs(f"{SCRIPT_DIR}/checkpoints", exist_ok=True)
@@ -108,10 +114,12 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     criterion = nn.L1Loss(reduction='mean')
 
-    train_dataset = AgePredictionDataset(split_fnames[:4])
-    val_dataset = AgePredictionDataset(split_fnames[4:])
+    dataset = AgePredictionDataset(split_fnames)
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = data.random_split(dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=opts.batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
     ## Training process
