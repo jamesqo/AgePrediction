@@ -49,6 +49,8 @@ class AgePredictionDataset(Dataset):
 def parse_options():
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('arch', type=str)
+
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--n-epochs', type=int, default=30)
 
@@ -106,11 +108,18 @@ def main():
 
     log("Setting up model")
 
-    model = models.resnet18(num_classes=1)
-    # Set the number of input channels to 240
-    model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    if opts.arch == 'resnet18':
+        model = models.resnet18(num_classes=1)
+        # Set the number of input channels to 240
+        model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    elif opts.arch == 'vgg16':
+        model = models.vgg16(num_classes=1)
+        model.features[0] = nn.Conv2d(240, 64, kernel_size=3, padding=1)
+    else:
+        raise Exception(f"Invalid arch: {opts.arch}")
     model.double()
     model.cuda()
+
     optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     criterion = nn.L1Loss(reduction='mean')
 
