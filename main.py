@@ -61,7 +61,11 @@ def parse_options():
 
     parser.add_argument('--max-samples', type=int)
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    for arg in vars(args):
+        log(f"{arg}: {getattr(args, arg)}")
+    log('='*20)
+    return args
 
 def train(model, optimizer, criterion, train_loader):
     model.train()
