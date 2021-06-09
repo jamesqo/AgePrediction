@@ -22,7 +22,7 @@ def log(message):
         log_file.write(f"{message}\n")
 
 class AgePredictionDataset(Dataset):
-    def __init__(self, split_fnames):
+    def __init__(self, split_fnames, max_samples=None):
         rows = []
 
         for fname in split_fnames:
@@ -34,6 +34,9 @@ class AgePredictionDataset(Dataset):
                     path = path.replace('/ABIDE/', '/ABIDE_I/')
                     path = path.replace('/NIH-PD/', '/NIH_PD/')
                     rows.append((id, float(age), sex, path))
+
+        if max_samples is not None:
+            rows = random.sample(rows, max_samples)
 
         self.rows = rows
 
@@ -53,9 +56,10 @@ def parse_options():
 
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--n-epochs', type=int, default=30)
-
     parser.add_argument('--learning-rate', type=float, default=1e-3)
     parser.add_argument('--weight-decay', type=float, default=1e-6)
+
+    parser.add_argument('--max-samples', type=int)
 
     return parser.parse_args()
 
@@ -123,7 +127,9 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     criterion = nn.L1Loss(reduction='mean')
 
-    dataset = AgePredictionDataset(split_fnames)
+    log("Setting up dataset")
+
+    dataset = AgePredictionDataset(split_fnames, opts.max_samples)
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = data.random_split(dataset, [train_size, val_size])
