@@ -14,6 +14,8 @@ from torch.utils import data
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 
+from vgg import VGG8
+
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 LOG_FILE = f"{SCRIPT_DIR}/logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
@@ -120,9 +122,8 @@ def main():
         model = models.resnet18(num_classes=1)
         # Set the number of input channels to 240
         model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    elif opts.arch == 'vgg16':
-        model = models.vgg16(num_classes=1)
-        model.features[0] = nn.Conv2d(240, 64, kernel_size=3, padding=1)
+    elif opts.arch == 'vgg8':
+        model = VGG8(in_channels=240, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {opts.arch}")
     model.double()
