@@ -57,7 +57,6 @@ def parse_options():
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--n-epochs', type=int, default=30)
     parser.add_argument('--learning-rate', type=float, default=1e-3)
-    parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight-decay', type=float, default=1e-6)
 
     parser.add_argument('--max-samples', type=int)
@@ -129,10 +128,7 @@ def main():
     model.double()
     model.cuda()
 
-    if opts.arch == 'resnet18':
-        optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
-    elif opts.arch == 'vgg16':
-        optimizer = optim.SGD(model.parameters(), lr=opts.learning_rate, momentum=opts.momentum, weight_decay=opts.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     criterion = nn.L1Loss(reduction='mean')
 
     log("Setting up dataset")
