@@ -91,12 +91,18 @@ def resample(df, sampling_mode):
     def count_samples(bin):
         return sum(df['agebin'] == bin)
 
-    bins = set(df['agebin'])
+    log("Resampling data")
+
+    bins = sorted(set(df['agebin']))
+    bin_counts = [count_samples(bin) for bin in bins]
+    log(f"Bin counts: {dict(zip(bins, bin_counts))}")
+
     if sampling_mode == 'raw':
         pass
     elif sampling_mode == 'oversample':
         max_bin = max(bins, key=count_samples)
         max_count = count_samples(max_bin)
+        log(f"Max bin is {max_bin} with {max_count} samples")
 
         for bin in bins:
             n_under = max_count - count_samples(bin)
@@ -106,10 +112,12 @@ def resample(df, sampling_mode):
             df = pd.concat([df, new_samples], axis=0)
     elif sampling_mode == 'undersample':
         # The actual min agebin could have a very small number of samples, so instead
-        # use the smallest one with a sample count >= the 5th percentile.
-        target_count = np.percentile([count_samples(bin) for bin in bins], 5)
+        # use the smallest one with a sample count >= the 10th percentile.
+        target_count = np.percentile(bin_counts, 10)
+        log(f"10th percentile of bin counts: {target_count}")
         min_bin = min([bin for bin in bins if count_samples(bin) >= target_count], key=count_samples)
         min_count = count_samples(min_bin)
+        log(f"Min bin is {min_bin} with {min_count} samples")
 
         for bin in bins:
             n_over = count_samples(bin) - min_count
@@ -121,7 +129,7 @@ def resample(df, sampling_mode):
     else:
         raise Exception(f"Invalid sampling mode: {sampling_mode}")
 
-    print(f"Number of samples in dataset: {df.shape[0]}")
+    log(f"Number of samples in final dataset: {df.shape[0]}")
     return df
 
 def train(model, optimizer, criterion, train_loader):
