@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 import torch
 from torch import nn
 from torch import optim
+from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
@@ -47,7 +48,9 @@ def parse_options():
 
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--n-epochs', type=int, default=30)
-    parser.add_argument('--learning-rate', type=float, default=1e-3)
+    parser.add_argument('--initial-lr', type=float, default=1e-3)
+    parser.add_argument('--step-size', type=int, default=10)
+    parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--weight-decay', type=float, default=1e-6)
 
     parser.add_argument('--max-samples', type=int)
@@ -142,13 +145,14 @@ def main():
     model.double()
     model.cuda()
 
-    optimizer = optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
+    scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
     criterion = nn.L1Loss(reduction='mean')
 
     log("Setting up dataset")
 
     df = load_samples(split_fnames, opts.max_samples)
-    train_df, val_df = train_test_split(df, test_ratio=0.2, stratify=df['agebin'])
+    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
     train_dataset = AgePredictionDataset(train_df)
     val_dataset = AgePredictionDataset(val_df)
 
@@ -170,6 +174,7 @@ def main():
         log(f"Mean training loss: {train_loss}")
         val_loss = validate(model, criterion, val_loader)
         log(f"Mean validation loss: {val_loss}")
+        scheduler.step()
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
