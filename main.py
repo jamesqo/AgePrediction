@@ -88,12 +88,35 @@ def load_samples(split_fnames, max_samples=None):
     return combined_df
 
 def resample(df, sampling_mode):
+    def count_samples(bin):
+        return sum(df['agebin'] == bin)
+
     if sampling_mode == 'raw':
         pass
     elif sampling_mode == 'oversample':
-        # TODO: Take the age bin with the most number of samples, and oversample other age bins until they have the same number of samples
+        max_bin = max(df['agebin'], count_samples)
+        max_count = count_samples(max_bin)
+
+        for bin in bins:
+            if bin == max_bin:
+                continue
+            n_under = max_count - count_samples(bin)
+            new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
+            df = pd.concat([df, new_samples], axis=0)
     elif sampling_mode == 'undersample':
-        # TODO: Take the age bin with the fewest number of samples, and undersample other age bins until they have the same number of samples
+        # The actual min agebin could have a very small number of samples, so instead
+        # use the smallest one with a sample count >= the 5th percentile.
+        target_count = np.percentile([count_samples(bin) for bin in df['agebin']], 5)
+        min_bin = min([bin for bin in df['agebin'] if count_samples(bin) >= target_count], count_samples)
+        min_count = count_samples(min_bin)
+
+        for bin in bins:
+            n_over = count_samples(bin) - min_count
+            if n_over <= 0:
+                continue
+            replacement_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
+            df = df[df['agebin'] != bin]
+            df = pd.concat([df, replacement_samples], axis=0)
     else:
         raise Exception(f"Invalid sampling mode: {sampling_mode}")
 
