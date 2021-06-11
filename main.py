@@ -91,23 +91,24 @@ def resample(df, sampling_mode):
     def count_samples(bin):
         return sum(df['agebin'] == bin)
 
+    bins = set(df['agebin'])
     if sampling_mode == 'raw':
         pass
     elif sampling_mode == 'oversample':
-        max_bin = max(df['agebin'], count_samples)
+        max_bin = max(bins, key=count_samples)
         max_count = count_samples(max_bin)
 
         for bin in bins:
-            if bin == max_bin:
-                continue
             n_under = max_count - count_samples(bin)
+            if n_under == 0:
+                continue
             new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
             df = pd.concat([df, new_samples], axis=0)
     elif sampling_mode == 'undersample':
         # The actual min agebin could have a very small number of samples, so instead
         # use the smallest one with a sample count >= the 5th percentile.
-        target_count = np.percentile([count_samples(bin) for bin in df['agebin']], 5)
-        min_bin = min([bin for bin in df['agebin'] if count_samples(bin) >= target_count], count_samples)
+        target_count = np.percentile([count_samples(bin) for bin in bins], 5)
+        min_bin = min([bin for bin in bins if count_samples(bin) >= target_count], key=count_samples)
         min_count = count_samples(min_bin)
 
         for bin in bins:
