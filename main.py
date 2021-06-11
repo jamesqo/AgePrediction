@@ -136,10 +136,10 @@ def main():
 
     if opts.arch == 'resnet18':
         model = models.resnet18(num_classes=1)
-        # Set the number of input channels to 240
-        model.conv1 = nn.Conv2d(240, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        # Set the number of input channels to 130
+        model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
     elif opts.arch == 'vgg8':
-        model = VGG8(in_channels=240, num_classes=1)
+        model = VGG8(in_channels=130, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {opts.arch}")
     model.double()
