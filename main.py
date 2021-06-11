@@ -7,6 +7,8 @@ import random
 import matplotlib.pyplot as plt
 import nibabel
 import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
 import torch
 from torch import nn
 from torch import optim
@@ -24,32 +26,18 @@ def log(message):
         log_file.write(f"{message}\n")
 
 class AgePredictionDataset(Dataset):
-    def __init__(self, split_fnames, max_samples=None):
-        rows = []
-
-        for fname in split_fnames:
-            split_num = int(fname[:-len('.list')].split('_')[-1])
-            with open(fname, 'r') as file:
-                lines = file.read().splitlines()
-                for line in lines:
-                    id, age, sex, path = line.split(' ')
-                    path = path.replace('/ABIDE/', '/ABIDE_I/')
-                    path = path.replace('/NIH-PD/', '/NIH_PD/')
-                    rows.append((id, float(age), sex, path))
-
-        if max_samples is not None:
-            rows = random.sample(rows, max_samples)
-
-        self.rows = rows
+    def __init__(self, df):
+        self.df = df
 
     def __getitem__(self, idx):
-        id, age, sex, path = self.rows[idx]
-        image = nibabel.load(path).get_fdata()
+        row = self.df.iloc[idx]
+        image = nibabel.load(row['path']).get_fdata()
         image /= np.percentile(image, 95) # Normalize intensity
+        age = row['age']
         return (image, age)
 
     def __len__(self):
-        return len(self.rows)
+        return len(self.df)
 
 def parse_options():
     parser = argparse.ArgumentParser()
@@ -68,6 +56,30 @@ def parse_options():
         log(f"{arg}: {getattr(args, arg)}")
     log('='*20)
     return args
+
+def load_samples(split_fnames, max_samples=None):
+    def correct_path(path):
+        path = path.replace('/ABIDE/', '/ABIDE_I/')
+        path = path.replace('/NIH-PD/', '/NIH_PD/')
+        return path
+
+    schema = {'id': str, 'age': float, 'sex': str, 'path': str}
+    dfs = []
+    for fname in fnames:
+        split_num = int(fname[:-len('.list')].split('_')[-1])
+
+        df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
+        df['path'] = df['path'].apply(correct_path)
+        df['agebin'] = df['age'] // 5
+        df['split'] = split_num
+        dfs.append(df)
+    
+    combined_df = pd.concat(dfs, axis=0)
+    
+    if max_samples is not None:
+        combined_df = combined_df.sample(max_samples)
+    
+    return combined_df
 
 def train(model, optimizer, criterion, train_loader):
     model.train()
@@ -134,10 +146,10 @@ def main():
 
     log("Setting up dataset")
 
-    dataset = AgePredictionDataset(split_fnames, opts.max_samples)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = data.random_split(dataset, [train_size, val_size])
+    df = load_samples(split_fnames, opts.max_samples)
+    train_df, val_df = train_test_split(df, test_ratio=0.2, stratify=df['agebin'])
+    train_dataset = AgePredictionDataset(train_df)
+    val_dataset = AgePredictionDataset(val_df)
 
     train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
