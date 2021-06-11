@@ -55,6 +55,8 @@ def parse_options():
 
     parser.add_argument('--max-samples', type=int)
 
+    parser.add_argument('--sampling-mode', type=str, default='raw')
+
     args = parser.parse_args()
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
@@ -84,6 +86,19 @@ def load_samples(split_fnames, max_samples=None):
         combined_df = combined_df.sample(max_samples)
     
     return combined_df
+
+def resample(df, sampling_mode):
+    if sampling_mode == 'raw':
+        pass
+    elif sampling_mode == 'oversample':
+        # TODO: Take the age bin with the most number of samples, and oversample other age bins until they have the same number of samples
+    elif sampling_mode == 'undersample':
+        # TODO: Take the age bin with the fewest number of samples, and undersample other age bins until they have the same number of samples
+    else:
+        raise Exception(f"Invalid sampling mode: {sampling_mode}")
+
+    print(f"Number of samples in dataset: {df.shape[0]}")
+    return df
 
 def train(model, optimizer, criterion, train_loader):
     model.train()
@@ -152,6 +167,7 @@ def main():
     log("Setting up dataset")
 
     df = load_samples(split_fnames, opts.max_samples)
+    df = resample(df, opts.sampling_mode)
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
     train_dataset = AgePredictionDataset(train_df)
     val_dataset = AgePredictionDataset(val_df)
