@@ -66,7 +66,7 @@ def load_samples(split_fnames, max_samples=None):
 
     schema = {'id': str, 'age': float, 'sex': str, 'path': str}
     dfs = []
-    for fname in fnames:
+    for fname in split_fnames:
         split_num = int(fname[:-len('.list')].split('_')[-1])
 
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
