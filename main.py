@@ -91,7 +91,7 @@ def resample(df, sampling_mode):
     def count_samples(bin):
         return sum(df['agebin'] == bin)
 
-    log("Resampling data")
+    log("Resampling training data")
 
     bins = sorted(set(df['agebin']))
     bin_counts = [count_samples(bin) for bin in bins]
@@ -129,7 +129,7 @@ def resample(df, sampling_mode):
     else:
         raise Exception(f"Invalid sampling mode: {sampling_mode}")
 
-    log(f"Number of samples in final dataset: {df.shape[0]}")
+    log(f"Number of samples in final training dataset: {df.shape[0]}")
     return df
 
 def train(model, optimizer, criterion, train_loader):
@@ -199,8 +199,8 @@ def main():
     log("Setting up dataset")
 
     df = load_samples(split_fnames, opts.max_samples)
-    df = resample(df, opts.sampling_mode)
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
+    train_df = resample(train_df, opts.sampling_mode)
     train_dataset = AgePredictionDataset(train_df)
     val_dataset = AgePredictionDataset(val_df)
 
