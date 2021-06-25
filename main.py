@@ -20,7 +20,12 @@ from torchvision import models
 from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-LOG_FILE = f"{SCRIPT_DIR}/logs/log_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+SPLITS_DIR = os.path.join(SCRIPT_DIR, "folderlist")
+START_TIME = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+CHECKPOINT_DIR = os.path.join(SCRIPT_DIR, "checkpoints", START_TIME)
+FIGURES_DIR = os.path.join(SCRIPT_DIR, "figures", START_TIME)
+LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{START_TIME}.log")
 
 def log(message):
     with open(LOG_FILE, 'a+') as log_file:
@@ -173,10 +178,10 @@ def main():
 
     opts = parse_options()
     
-    os.makedirs(f"{SCRIPT_DIR}/checkpoints", exist_ok=True)
-    os.makedirs(f"{SCRIPT_DIR}/figures", exist_ok=True)
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(FIGURES_DIR, exist_ok=True)
 
-    split_fnames = glob.glob(f"{SCRIPT_DIR}/folderlist/nfold_imglist_all_nfold_*.list")
+    split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
     log("Setting up model")
@@ -227,7 +232,7 @@ def main():
         train_losses.append(train_loss)
         val_losses.append(val_loss)
         if val_loss < best_val_loss:
-            torch.save(model.state_dict(), f"{SCRIPT_DIR}/checkpoints/best_model.pth")
+            torch.save(model.state_dict(), f"{CHECKPOINT_DIR}/best_model.pth")
 
             best_epoch = epoch
             best_val_loss = val_loss
@@ -242,7 +247,7 @@ def main():
     plt.plot(epochs, train_losses)
     plt.plot(epochs, val_losses)
     plt.legend(["training loss", "validation loss"])
-    plt.savefig(f"{SCRIPT_DIR}/figures/train_and_val_loss_vs_epoch.png")
+    plt.savefig(f"{FIGURES_DIR}/train_and_val_loss_vs_epoch.png")
     plt.clf()
 
 if __name__ == '__main__':
