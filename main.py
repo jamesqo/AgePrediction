@@ -4,7 +4,6 @@ import glob
 import os
 import random
 
-import matplotlib.pyplot as plt
 import nibabel
 import numpy as np
 import pandas as pd
@@ -24,7 +23,7 @@ SPLITS_DIR = os.path.join(SCRIPT_DIR, "folderlist")
 START_TIME = datetime.now().strftime('%Y%m%d_%H%M%S')
 
 CHECKPOINT_DIR = os.path.join(SCRIPT_DIR, "checkpoints", START_TIME)
-FIGURES_DIR = os.path.join(SCRIPT_DIR, "figures", START_TIME)
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "results", START_TIME)
 LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{START_TIME}.log")
 
 def log(message):
@@ -179,7 +178,7 @@ def main():
     opts = parse_options()
     
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    os.makedirs(FIGURES_DIR, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
 
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
@@ -238,17 +237,25 @@ def main():
             best_val_loss = val_loss
     
     log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
-
-    ## Plotting
-
-    log("Generating plots")
-
-    epochs = range(opts.n_epochs)
-    plt.plot(epochs, train_losses)
-    plt.plot(epochs, val_losses)
-    plt.legend(["training loss", "validation loss"])
-    plt.savefig(f"{FIGURES_DIR}/train_and_val_loss_vs_epoch.png")
-    plt.clf()
+    
+    ## Evaluation
+    
+    model.load_state_dict(f"{CHECKPOINT_DIR}/best_model.pth")
+    
+    bin_losses = []
+    for bin in bins:
+        bin_df = val_df[val_df['agebin'] == bin]]
+        bin_dataset = AgePredictionDataset(bin_df)
+        bin_loader = DataLoader(bin_dataset, batch_size=opts.batch_size)
+        
+        bin_loss = validate(model, criterion, bin_loader)
+        bin_losses.append(bin_loss)
+    
+    ## Save results so we can plot them later
+    
+    np.savetxt(f"{RESULTS_DIR}/train_losses_during_training.txt", train_losses)
+    np.savetxt(f"{RESULTS_DIR}/val_losses_during_training.txt", val_losses)
+    np.savetxt(f"{RESULTS_DIR}/best_model_val_losses_per_bin.txt", bin_losses)
 
 if __name__ == '__main__':
     main()
