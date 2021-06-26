@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 import glob
+import json
 import os
 import random
 
@@ -21,9 +22,6 @@ from vgg import VGG8
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SPLITS_DIR = os.path.join(SCRIPT_DIR, "folderlist")
 START_TIME = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-CHECKPOINT_DIR = os.path.join(SCRIPT_DIR, "checkpoints", START_TIME)
-RESULTS_DIR = os.path.join(SCRIPT_DIR, "results", START_TIME)
 LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{START_TIME}.log")
 
 def log(message):
@@ -37,7 +35,7 @@ class AgePredictionDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         image = nibabel.load(row['path']).get_fdata()
-        image = image[54:184,25:195,12:132] # Crop out zeroes
+        image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
         age = row['age']
         return (image, age)
@@ -180,9 +178,12 @@ def main():
     torch.manual_seed(0)
 
     opts = parse_options()
+
+    checkpoint_dir = os.path.join(SCRIPT_DIR, "checkpoints", opts.eval or START_TIME)
+    results_dir = os.path.join(SCRIPT_DIR, "results", START_TIME)
     
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(results_dir, exist_ok=True)
 
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
@@ -217,6 +218,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
     if opts.eval is None:
+
         ## Training process
 
         log("Starting training process")
@@ -237,7 +239,7 @@ def main():
             train_losses.append(train_loss)
             val_losses.append(val_loss)
             if val_loss < best_val_loss:
-                torch.save(model.state_dict(), f"{CHECKPOINT_DIR}/best_model.pth")
+                torch.save(model.state_dict(), f"{checkpoint_dir}/best_model.pth")
 
                 best_epoch = epoch
                 best_val_loss = val_loss
@@ -246,11 +248,10 @@ def main():
     
     ## Evaluation
    
-    path = f"{CHECKPOINT_DIR}/best_model.pth" if opts.eval is None else \
-           f"{SCRIPT_DIR}/checkpoints/{opts.eval}/best_model.pth"
-    checkpoint = torch.load(path)
+    checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth")
     model.load_state_dict(checkpoint)
     
+    bins = sorted(set(df['agebin']))
     bin_losses = []
     for bin in bins:
         bin_df = val_df[val_df['agebin'] == bin]
@@ -262,14 +263,17 @@ def main():
     
     ## Save results so we can plot them later
     
-    with open(f"{RESULTS_DIR}/config.json") as fp:
+    with open(f"{results_dir}/config.json") as cfg_file:
         cfg = opts
         cfg['start_time'] = START_TIME
-        json.dump(cfg, fp)
+        cfg['train_counts'] = dict(train_df['agebin'].value_counts())
+        cfg['val_counts'] = dict(val_df['agebin'].value_counts())
+        json.dump(cfg, cfg_file)
     
-    np.savetxt(f"{RESULTS_DIR}/train_losses_during_training.txt", train_losses)
-    np.savetxt(f"{RESULTS_DIR}/val_losses_during_training.txt", val_losses)
-    np.savetxt(f"{RESULTS_DIR}/best_model_val_losses_per_bin.txt", bin_losses)
+    if opts.eval is None:
+        np.savetxt(f"{results_dir}/train_losses_during_training.txt", train_losses)
+        np.savetxt(f"{results_dir}/val_losses_during_training.txt", val_losses)
+    np.savetxt(f"{results_dir}/best_model_val_losses_per_bin.txt", bin_losses)
     
 
 if __name__ == '__main__':
