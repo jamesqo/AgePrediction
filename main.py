@@ -58,6 +58,7 @@ def parse_options():
     parser.add_argument('--weight-decay', type=float, default=1e-6)
 
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--eval', type=str)
     parser.add_argument('--max-samples', type=int)
 
     parser.add_argument('--sampling-mode', type=str, default='raw')
@@ -215,36 +216,40 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
-    ## Training process
+    if opts.eval is None:
+        ## Training process
 
-    log("Starting training process")
+        log("Starting training process")
 
-    best_epoch = None
-    best_val_loss = np.inf
-    train_losses = []
-    val_losses = []
+        best_epoch = None
+        best_val_loss = np.inf
+        train_losses = []
+        val_losses = []
 
-    for epoch in range(opts.n_epochs):
-        log(f"Epoch {epoch}/{opts.n_epochs}")
-        train_loss = train(model, optimizer, criterion, train_loader, use_cpu=opts.cpu)
-        log(f"Mean training loss: {train_loss}")
-        val_loss = validate(model, criterion, val_loader, use_cpu=opts.cpu)
-        log(f"Mean validation loss: {val_loss}")
-        scheduler.step()
+        for epoch in range(opts.n_epochs):
+            log(f"Epoch {epoch}/{opts.n_epochs}")
+            train_loss = train(model, optimizer, criterion, train_loader, use_cpu=opts.cpu)
+            log(f"Mean training loss: {train_loss}")
+            val_loss = validate(model, criterion, val_loader, use_cpu=opts.cpu)
+            log(f"Mean validation loss: {val_loss}")
+            scheduler.step()
 
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        if val_loss < best_val_loss:
-            torch.save(model.state_dict(), f"{CHECKPOINT_DIR}/best_model.pth")
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            if val_loss < best_val_loss:
+                torch.save(model.state_dict(), f"{CHECKPOINT_DIR}/best_model.pth")
 
-            best_epoch = epoch
-            best_val_loss = val_loss
-    
-    log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
+                best_epoch = epoch
+                best_val_loss = val_loss
+        
+        log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
     
     ## Evaluation
-    
-    model.load_state_dict(f"{CHECKPOINT_DIR}/best_model.pth")
+   
+    path = f"{CHECKPOINT_DIR}/best_model.pth" if opts.eval is None else \
+           f"{SCRIPT_DIR}/checkpoints/{opts.eval}/best_model.pth"
+    checkpoint = torch.load(path)
+    model.load_state_dict(checkpoint)
     
     bin_losses = []
     for bin in bins:
