@@ -268,7 +268,7 @@ def main():
         cfg['start_time'] = START_TIME
         cfg['train_counts'] = dict(train_df['agebin'].value_counts())
         cfg['val_counts'] = dict(val_df['agebin'].value_counts())
-        json.dump(cfg, cfg_file)
+        json.dump(cfg, cfg_file, sort_keys=True, indent=4)
     
     if opts.eval is None:
         np.savetxt(f"{results_dir}/train_losses_during_training.txt", train_losses)
