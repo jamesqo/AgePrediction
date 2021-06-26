@@ -57,6 +57,7 @@ def parse_options():
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--weight-decay', type=float, default=1e-6)
 
+    parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--max-samples', type=int)
 
     parser.add_argument('--sampling-mode', type=str, default='raw')
@@ -136,13 +137,14 @@ def resample(df, sampling_mode):
     log(f"Number of samples in final training dataset: {df.shape[0]}")
     return df
 
-def train(model, optimizer, criterion, train_loader):
+def train(model, optimizer, criterion, train_loader, use_cpu=False):
     model.train()
 
     losses = []
 
     for batch_idx, (images, ages) in enumerate(train_loader):
-        images, ages = images.cuda(), ages.cuda()
+        if not use_cpu:
+            images, ages = images.cuda(), ages.cuda()
         optimizer.zero_grad()
         age_preds = model(images).view(-1)
         loss = criterion(age_preds, ages)
@@ -155,14 +157,15 @@ def train(model, optimizer, criterion, train_loader):
     
     return np.mean(losses)
 
-def validate(model, criterion, val_loader):
+def validate(model, criterion, val_loader, use_cpu=False):
     model.eval()
 
     losses = []
 
     with torch.no_grad():
         for (images, ages) in val_loader:
-            images, ages = images.cuda(), ages.cuda()
+            if not use_cpu:
+                images, ages = images.cuda(), ages.cuda()
             age_preds = model(images).view(-1)
             loss = criterion(age_preds, ages)
 
@@ -194,7 +197,8 @@ def main():
     else:
         raise Exception(f"Invalid arch: {opts.arch}")
     model.double()
-    model.cuda()
+    if not opts.cpu:
+        model.cuda()
 
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
@@ -222,9 +226,9 @@ def main():
 
     for epoch in range(opts.n_epochs):
         log(f"Epoch {epoch}/{opts.n_epochs}")
-        train_loss = train(model, optimizer, criterion, train_loader)
+        train_loss = train(model, optimizer, criterion, train_loader, use_cpu=opts.cpu)
         log(f"Mean training loss: {train_loss}")
-        val_loss = validate(model, criterion, val_loader)
+        val_loss = validate(model, criterion, val_loader, use_cpu=opts.cpu)
         log(f"Mean validation loss: {val_loss}")
         scheduler.step()
 
@@ -244,18 +248,24 @@ def main():
     
     bin_losses = []
     for bin in bins:
-        bin_df = val_df[val_df['agebin'] == bin]]
+        bin_df = val_df[val_df['agebin'] == bin]
         bin_dataset = AgePredictionDataset(bin_df)
         bin_loader = DataLoader(bin_dataset, batch_size=opts.batch_size)
         
-        bin_loss = validate(model, criterion, bin_loader)
+        bin_loss = validate(model, criterion, bin_loader, use_cpu=opts.cpu)
         bin_losses.append(bin_loss)
     
     ## Save results so we can plot them later
     
+    with open(f"{RESULTS_DIR}/config.json") as fp:
+        cfg = opts
+        cfg['start_time'] = START_TIME
+        json.dump(cfg, fp)
+    
     np.savetxt(f"{RESULTS_DIR}/train_losses_during_training.txt", train_losses)
     np.savetxt(f"{RESULTS_DIR}/val_losses_during_training.txt", val_losses)
     np.savetxt(f"{RESULTS_DIR}/best_model_val_losses_per_bin.txt", bin_losses)
+    
 
 if __name__ == '__main__':
     main()
