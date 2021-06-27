@@ -214,6 +214,9 @@ def main():
     train_dataset = AgePredictionDataset(train_df)
     val_dataset = AgePredictionDataset(val_df)
 
+    log(train_df['agebin'].value_counts())
+    log(val_df['agebin'].value_counts())
+
     train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
@@ -247,6 +250,8 @@ def main():
         log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
     
     ## Evaluation
+
+    log("Evaluating best model on val dataset")
    
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth")
     model.load_state_dict(checkpoint)
@@ -262,12 +267,14 @@ def main():
         bin_losses.append(bin_loss)
     
     ## Save results so we can plot them later
+
+    log("Saving results")
     
-    with open(f"{results_dir}/config.json") as cfg_file:
-        cfg = opts
+    with open(f"{results_dir}/config.json", 'w+') as cfg_file:
+        cfg = vars(opts)
         cfg['start_time'] = START_TIME
-        cfg['train_counts'] = dict(train_df['agebin'].value_counts())
-        cfg['val_counts'] = dict(val_df['agebin'].value_counts())
+        #cfg['train_counts'] = dict(train_df['agebin'].value_counts())
+        #cfg['val_counts'] = dict(val_df['agebin'].value_counts())
         json.dump(cfg, cfg_file, sort_keys=True, indent=4)
     
     if opts.eval is None:
