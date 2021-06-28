@@ -94,20 +94,29 @@ def load_samples(split_fnames, max_samples=None):
 def resample(df, sampling_mode):
     def count_samples(bin):
         return sum(df['agebin'] == bin)
-
+    
     log("Resampling training data")
 
     bins = sorted(set(df['agebin']))
     bin_counts = [count_samples(bin) for bin in bins]
+    bin_ratios = [count / df.shape[0] for count in bin_counts]
     log(f"Bin counts: {dict(zip(bins, bin_counts))}")
+
+    max_bin = max(bins, key=count_samples)
+    max_count = count_samples(max_bin)
+    log(f"Max bin is {max_bin} with {max_count} samples")
+
+    # The actual min agebin could have a very small number of samples, so instead
+    # use the smallest one with a sample count >= the 10th percentile.
+    min_min_count = np.percentile(bin_counts, 10)
+    log(f"10th percentile of bin counts: {min_min_count}")
+    min_bin = min([bin for bin in bins if count_samples(bin) >= min_min_count], key=count_samples)
+    min_count = count_samples(min_bin)
+    log(f"Min bin is {min_bin} with {min_count} samples")
 
     if sampling_mode == 'raw':
         pass
     elif sampling_mode == 'oversample':
-        max_bin = max(bins, key=count_samples)
-        max_count = count_samples(max_bin)
-        log(f"Max bin is {max_bin} with {max_count} samples")
-
         for bin in bins:
             n_under = max_count - count_samples(bin)
             if n_under == 0:
@@ -115,21 +124,27 @@ def resample(df, sampling_mode):
             new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
             df = pd.concat([df, new_samples], axis=0)
     elif sampling_mode == 'undersample':
-        # The actual min agebin could have a very small number of samples, so instead
-        # use the smallest one with a sample count >= the 10th percentile.
-        target_count = np.percentile(bin_counts, 10)
-        log(f"10th percentile of bin counts: {target_count}")
-        min_bin = min([bin for bin in bins if count_samples(bin) >= target_count], key=count_samples)
-        min_count = count_samples(min_bin)
-        log(f"Min bin is {min_bin} with {min_count} samples")
-
         for bin in bins:
             n_over = count_samples(bin) - min_count
             if n_over <= 0:
                 continue
-            replacement_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
+            new_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
             df = df[df['agebin'] != bin]
-            df = pd.concat([df, replacement_samples], axis=0)
+            df = pd.concat([df, new_samples], axis=0)
+    elif sampling_mode == 'scale-up':
+        target_count = max_count * len(bins)
+        for bin in bins:
+            count = bin_ratios[bin] * target_count
+            new_samples = df[df['agebin'] == bin].sample(count, replace=True)
+            df = df[df['agebin'] != bin]
+            df = pd.concat([df, new_samples], axis=0)
+    elif sampling_mode == 'scale-down':
+        target_count = min_count * len(bins)
+        for bin in bins:
+            count = bin_ratios[bin] * target_count
+            new_samples = df[df['agebin'] == bin].sample(count, replace=False)
+            df = df[df['agebin'] != bin]
+            df = pd.concat([df, new_samples], axis=0)
     else:
         raise Exception(f"Invalid sampling mode: {sampling_mode}")
 
