@@ -134,14 +134,14 @@ def resample(df, sampling_mode):
     elif sampling_mode == 'scale-up':
         target_count = max_count * len(bins)
         for bin in bins:
-            count = bin_ratios[bin] * target_count
+            count = bin_ratios[int(bin)] * target_count
             new_samples = df[df['agebin'] == bin].sample(count, replace=True)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
     elif sampling_mode == 'scale-down':
         target_count = min_count * len(bins)
         for bin in bins:
-            count = bin_ratios[bin] * target_count
+            count = bin_ratios[int(bin)] * target_count
             new_samples = df[df['agebin'] == bin].sample(count, replace=False)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
