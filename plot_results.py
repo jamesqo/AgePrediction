@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,17 +35,14 @@ def main():
     plt.clf()
 
     n_bins = len(val_losses_per_bin)
-    bins = range(n_bins)
-    display_bins = [f"{5*i}-{5*i+4}" for i in bins]
+    bins = [f"{5*i}-{5*i+4}" for i in range(n_bins)]
     plt.title(cfg_desc)
     plt.xlabel("Age bin")
     plt.ylabel("MAE")
-    plt.xticks(bins, display_bins, rotation='vertical')
-    plt.hist(val_losses_per_bin, bins)
+    plt.xticks(rotation='vertical')
+    plt.bar(bins, val_losses_per_bin)
     plt.savefig(f"{figures_dir}/val_losses_per_bin.png")
     plt.clf()
-
-    shutil.copyfile(f"{results_dir}/config.json", f"{figures_dir}/config.json")
 
 if __name__ == '__main__':
     main()
