@@ -14,6 +14,7 @@ def main():
 
     results_dir = os.path.join(SCRIPT_DIR, "results", opts.run)
     figures_dir = os.path.join(SCRIPT_DIR, "figures", opts.run)
+    os.makedirs(figures_dir, exist_ok=True)
 
     train_losses = np.loadtxt(f"{results_dir}/train_losses_during_training.txt")
     val_losses = np.loadtxt(f"{results_dir}/val_losses_during_training.txt")
