@@ -1,5 +1,5 @@
 import argparse
-from main import SCRIPT_DIR
+import json
 import os
 import shutil
 
@@ -20,8 +20,13 @@ def main():
     train_losses = np.loadtxt(f"{results_dir}/train_losses_during_training.txt")
     val_losses = np.loadtxt(f"{results_dir}/val_losses_during_training.txt")
     val_losses_per_bin = np.loadtxt(f"{results_dir}/best_model_val_losses_per_bin.txt")
+    with open(f"{results_dir}/config.json") as cfg_file:
+        cfg = json.load(cfg_file)
+
+    cfg_desc = f"{cfg['arch']} / {cfg['sampling_mode']}"
 
     n_epochs = len(train_losses)
+    plt.title(cfg_desc)
     plt.xlabel("Epoch")
     plt.ylabel("MAE")
     plt.plot(range(n_epochs), train_losses, label="Training loss")
@@ -31,10 +36,13 @@ def main():
     plt.clf()
 
     n_bins = len(val_losses_per_bin)
-    bins = [f"{5*i}-{5*i+4}" for i in range(n_bins)]
+    bins = range(n_bins)
+    display_bins = [f"{5*i}-{5*i+4}" for i in bins]
+    plt.title(cfg_desc)
     plt.xlabel("Age bin")
     plt.ylabel("MAE")
-    plt.plot(bins, val_losses_per_bin)
+    plt.xticks(bins, display_bins, rotation='vertical')
+    plt.hist(val_losses_per_bin, bins)
     plt.savefig(f"{figures_dir}/val_losses_per_bin.png")
     plt.clf()
 
