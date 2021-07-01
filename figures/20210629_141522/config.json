@@ -1,0 +1,14 @@
+{
+    "arch": "vgg8",
+    "batch_size": 5,
+    "cpu": false,
+    "eval": null,
+    "gamma": 0.5,
+    "initial_lr": 0.001,
+    "max_samples": null,
+    "n_epochs": 30,
+    "sampling_mode": "scale-down",
+    "start_time": "20210629_141522",
+    "step_size": 10,
+    "weight_decay": 1e-06
+}
