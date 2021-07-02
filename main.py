@@ -17,6 +17,7 @@ from torch.utils import data
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 
+from loss import WeightedL1Loss
 from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -60,8 +61,12 @@ def parse_options():
     parser.add_argument('--max-samples', type=int)
 
     parser.add_argument('--sampling-mode', type=str, default='raw')
+    parser.add_argument('--weight-samples', action='store_true')
 
     args = parser.parse_args()
+    assert args.sampling_mode in ('raw', 'undersample', 'oversample')
+    assert (not args.weight_samples) or (args.sampling_mode == 'raw')
+
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
     log('='*20)
@@ -219,7 +224,12 @@ def main():
 
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
-    criterion = nn.L1Loss(reduction='mean')
+    if opts.weight_samples:
+        bin_weights = len(train_df['agebin']) / train_df['agebin'].value_counts()
+        print(bin_weights)
+        criterion = WeightedL1Loss(bin_weights=bin_weights)
+    else:
+        criterion = nn.L1Loss(reduction='none')
 
     log("Setting up dataset")
 
