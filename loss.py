@@ -7,7 +7,8 @@ class WeightedL1Loss(nn.Module):
         self.bin_weights = bin_weights
 
     def forward(self, input, target):
-        bins = [t // 5 for t in target]
-        weights = [self.bin_weights[b] for b in bins]
-        losses = nn.L1Loss(reduction='none')(input, target)
-        return torch.dot(weights, losses)
+        sample_bins = [age // 5 for age in target]
+        sample_weights = [self.bin_weights[bin] for bin in sample_bins]
+        sample_weights = torch.tensor(sample_weights, dtype=torch.float).cuda()
+        losses = nn.L1Loss(reduction='none')(input, target).float()
+        return torch.dot(sample_weights, losses) / torch.sum(sample_weights)

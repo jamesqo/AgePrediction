@@ -216,8 +216,8 @@ def main():
     train_dataset = AgePredictionDataset(train_df)
     val_dataset = AgePredictionDataset(val_df)
 
-    log(train_df['agebin'].value_counts())
-    log(val_df['agebin'].value_counts())
+    #log(train_df['agebin'].value_counts())
+    #log(val_df['agebin'].value_counts())
 
     train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
@@ -239,8 +239,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
     if opts.weight_samples:
-        bin_weights = len(train_df['agebin']) / train_df['agebin'].value_counts()
-        print(bin_weights)
+        bin_weights = 1 / train_df['agebin'].value_counts()
         criterion = WeightedL1Loss(bin_weights=bin_weights)
     else:
         criterion = nn.L1Loss(reduction='none')
