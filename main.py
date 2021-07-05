@@ -208,6 +208,20 @@ def main():
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
+    log("Setting up dataset")
+
+    df = load_samples(split_fnames, opts.max_samples)
+    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
+    train_df = resample(train_df, opts.sampling_mode)
+    train_dataset = AgePredictionDataset(train_df)
+    val_dataset = AgePredictionDataset(val_df)
+
+    log(train_df['agebin'].value_counts())
+    log(val_df['agebin'].value_counts())
+
+    train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
+
     log("Setting up model")
 
     if opts.arch == 'resnet18':
@@ -230,20 +244,6 @@ def main():
         criterion = WeightedL1Loss(bin_weights=bin_weights)
     else:
         criterion = nn.L1Loss(reduction='none')
-
-    log("Setting up dataset")
-
-    df = load_samples(split_fnames, opts.max_samples)
-    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
-    train_df = resample(train_df, opts.sampling_mode)
-    train_dataset = AgePredictionDataset(train_df)
-    val_dataset = AgePredictionDataset(val_df)
-
-    log(train_df['agebin'].value_counts())
-    log(val_df['agebin'].value_counts())
-
-    train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
 
     if opts.eval is None:
 

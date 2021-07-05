@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 
 class WeightedL1Loss(nn.Module):
