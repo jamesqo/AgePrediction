@@ -156,14 +156,13 @@ def resample(df, sampling_mode):
     log(f"Number of samples in final training dataset: {df.shape[0]}")
     return df
 
-def train(model, optimizer, criterion, train_loader, use_cpu=False):
+def train(model, optimizer, criterion, train_loader, device):
     model.train()
 
     losses = []
 
     for batch_idx, (images, ages) in enumerate(train_loader):
-        if not use_cpu:
-            images, ages = images.cuda(), ages.cuda()
+        images, ages = images.to(device), ages.to(device)
         optimizer.zero_grad()
         age_preds = model(images).view(-1)
         loss = criterion(age_preds, ages)
@@ -176,15 +175,14 @@ def train(model, optimizer, criterion, train_loader, use_cpu=False):
     
     return np.mean(losses)
 
-def validate(model, criterion, val_loader, use_cpu=False):
+def validate(model, criterion, val_loader, device):
     model.eval()
 
     losses = []
 
     with torch.no_grad():
         for (images, ages) in val_loader:
-            if not use_cpu:
-                images, ages = images.cuda(), ages.cuda()
+            images, ages = images.to(device), ages.to(device)
             age_preds = model(images).view(-1)
             loss = criterion(age_preds, ages)
 
@@ -233,14 +231,14 @@ def main():
     else:
         raise Exception(f"Invalid arch: {opts.arch}")
     model.double()
-    if not opts.cpu:
-        model.cuda()
+    device = torch.device('cpu' if opts.cpu else 'cuda')
+    model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
     if opts.weight_samples:
         bin_weights = 1 / train_df['agebin'].value_counts()
-        criterion = WeightedL1Loss(bin_weights=bin_weights)
+        criterion = WeightedL1Loss(bin_weights=bin_weights, device=device)
     else:
         criterion = nn.L1Loss(reduction='none')
 
@@ -257,9 +255,9 @@ def main():
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")
-            train_loss = train(model, optimizer, criterion, train_loader, use_cpu=opts.cpu)
+            train_loss = train(model, optimizer, criterion, train_loader, device)
             log(f"Mean training loss: {train_loss}")
-            val_loss = validate(model, criterion, val_loader, use_cpu=opts.cpu)
+            val_loss = validate(model, criterion, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
