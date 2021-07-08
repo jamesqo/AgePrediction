@@ -11,13 +11,13 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
-from torch.utils.data import Dataset, DataLoader
 from torchvision import models
 
-from loss import WeightedL1Loss
+from loss import l1_loss, weighted_l1_loss
 from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -29,9 +29,23 @@ def log(message):
     with open(LOG_FILE, 'a+') as log_file:
         log_file.write(f"{message}\n")
 
-class AgePredictionDataset(Dataset):
-    def __init__(self, df):
+class AgePredictionDataset(data.Dataset):
+    def __init__(self, df, reweight):
         self.df = df
+        self.weights = self._prepare_weights(df, reweight)
+    
+    def _prepare_weights(df, reweight):
+        if reweight == 'none':
+            return None
+        
+        bin_counts = df['agebin'].value_counts()
+        if reweight == 'inv':
+            weights = [1. / bin_counts[bin] for bin in df['agebin']] # todo: clipping?
+        elif reweight == 'sqrt_inv':
+            weights = [1. / np.sqrt(bin_counts[bin]) for bin in df['agebin']] # todo: clipping?
+        scaling = len(weights) / sum(weights)
+        weights = [scaling * w for w in weights]
+        return weights
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
@@ -39,7 +53,8 @@ class AgePredictionDataset(Dataset):
         image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
         age = row['age']
-        return (image, age)
+        weight = self.weights[idx] if self.weights is not None else 1.
+        return (image, age, weight)
 
     def __len__(self):
         return len(self.df)
@@ -56,16 +71,16 @@ def parse_options():
     parser.add_argument('--gamma', type=float, default=0.5)
     parser.add_argument('--weight-decay', type=float, default=1e-6)
 
+    parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none')
+    parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none')
+
+    ## For testing purposes only
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--eval', type=str)
     parser.add_argument('--max-samples', type=int)
 
-    parser.add_argument('--sampling-mode', type=str, default='raw')
-    parser.add_argument('--weight-samples', action='store_true')
-
     args = parser.parse_args()
-    assert args.sampling_mode in ('raw', 'undersample', 'oversample')
-    assert (not args.weight_samples) or (args.sampling_mode == 'raw')
+    assert (args.sample == 'none') or (args.reweight == 'none')
 
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
@@ -96,7 +111,7 @@ def load_samples(split_fnames, max_samples=None):
     
     return combined_df
 
-def resample(df, sampling_mode):
+def resample(df, mode):
     def count_samples(bin):
         return sum(df['agebin'] == bin)
     
@@ -119,16 +134,16 @@ def resample(df, sampling_mode):
     min_count = count_samples(min_bin)
     log(f"Min bin is {min_bin} with {min_count} samples")
 
-    if sampling_mode == 'raw':
+    if mode == 'none':
         pass
-    elif sampling_mode == 'oversample':
+    elif mode == 'over':
         for bin in bins:
             n_under = max_count - count_samples(bin)
             if n_under == 0:
                 continue
             new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
             df = pd.concat([df, new_samples], axis=0)
-    elif sampling_mode == 'undersample':
+    elif mode == 'under':
         for bin in bins:
             n_over = count_samples(bin) - min_count
             if n_over <= 0:
@@ -136,14 +151,14 @@ def resample(df, sampling_mode):
             new_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
-    elif sampling_mode == 'scale-up':
+    elif mode == 'scale-up':
         target_count = max_count * len(bins)
         for bin in bins:
             count = int(bin_ratios[int(bin)] * target_count)
             new_samples = df[df['agebin'] == bin].sample(count, replace=True)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
-    elif sampling_mode == 'scale-down':
+    elif mode == 'scale-down':
         target_count = min_count * len(bins)
         for bin in bins:
             count = int(bin_ratios[int(bin)] * target_count)
@@ -151,21 +166,27 @@ def resample(df, sampling_mode):
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
     else:
-        raise Exception(f"Invalid sampling mode: {sampling_mode}")
+        raise Exception(f"Invalid sampling mode: {mode}")
 
     log(f"Number of samples in final training dataset: {df.shape[0]}")
     return df
 
-def train(model, optimizer, criterion, train_loader, device):
+def train(model, optimizer, train_loader, device):
+    def weighted_l1_loss(inputs, targets, weights):
+        loss = F.l1_loss(inputs, targets, reduction='none')
+        loss *= weights.expand_as(loss)
+        loss = torch.mean(loss)
+        return loss
+
     model.train()
 
     losses = []
 
-    for batch_idx, (images, ages) in enumerate(train_loader):
-        images, ages = images.to(device), ages.to(device)
+    for batch_idx, (images, ages, weights) in enumerate(train_loader):
+        images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         optimizer.zero_grad()
         age_preds = model(images).view(-1)
-        loss = criterion(age_preds, ages)
+        loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
         optimizer.step()
 
@@ -175,16 +196,16 @@ def train(model, optimizer, criterion, train_loader, device):
     
     return np.mean(losses)
 
-def validate(model, criterion, val_loader, device):
+def validate(model, val_loader, device):
     model.eval()
 
     losses = []
 
     with torch.no_grad():
-        for (images, ages) in val_loader:
+        for (images, ages, _) in val_loader:
             images, ages = images.to(device), ages.to(device)
             age_preds = model(images).view(-1)
-            loss = criterion(age_preds, ages)
+            loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
     
@@ -203,22 +224,19 @@ def main():
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
 
+    log("Setting up dataset")
+
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
-    log("Setting up dataset")
-
     df = load_samples(split_fnames, opts.max_samples)
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
-    train_df = resample(train_df, opts.sampling_mode)
-    train_dataset = AgePredictionDataset(train_df)
+    train_df = resample(train_df, mode=opts.sample)
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight)
     val_dataset = AgePredictionDataset(val_df)
 
-    #log(train_df['agebin'].value_counts())
-    #log(val_df['agebin'].value_counts())
-
-    train_loader = DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=opts.batch_size)
+    train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
+    val_loader = data.DataLoader(val_dataset, batch_size=opts.batch_size)
 
     log("Setting up model")
 
@@ -236,11 +254,6 @@ def main():
 
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
-    if opts.weight_samples:
-        bin_weights = 1 / train_df['agebin'].value_counts()
-        criterion = WeightedL1Loss(bin_weights=bin_weights, device=device)
-    else:
-        criterion = nn.L1Loss(reduction='none')
 
     if opts.eval is None:
 
@@ -255,9 +268,9 @@ def main():
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")
-            train_loss = train(model, optimizer, criterion, train_loader, device)
+            train_loss = train(model, optimizer, train_loader, device)
             log(f"Mean training loss: {train_loss}")
-            val_loss = validate(model, criterion, val_loader, device)
+            val_loss = validate(model, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
@@ -283,9 +296,9 @@ def main():
     for bin in bins:
         bin_df = val_df[val_df['agebin'] == bin]
         bin_dataset = AgePredictionDataset(bin_df)
-        bin_loader = DataLoader(bin_dataset, batch_size=opts.batch_size)
+        bin_loader = data.DataLoader(bin_dataset, batch_size=opts.batch_size)
         
-        bin_loss = validate(model, criterion, bin_loader, device)
+        bin_loss = validate(model, bin_loader, device)
         bin_losses.append(bin_loss)
     
     ## Save results so we can plot them later
