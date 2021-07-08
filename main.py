@@ -8,6 +8,7 @@ import random
 import nibabel
 import numpy as np
 import pandas as pd
+from scipy.ndimage import convolve1d
 from sklearn.model_selection import train_test_split
 import torch
 from torch import nn
@@ -17,7 +18,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 from torchvision import models
 
-from loss import l1_loss, weighted_l1_loss
+from lds import get_lds_kernel_window
 from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -30,21 +31,31 @@ def log(message):
         log_file.write(f"{message}\n")
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight):
+    def __init__(self, df, **kwargs):
         self.df = df
-        self.weights = self._prepare_weights(df, reweight)
+        self.weights = self._prepare_weights(df, **kwargs)
     
-    def _prepare_weights(df, reweight):
+    def _prepare_weights(df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1):
         if reweight == 'none':
             return None
         
+        # todo: clipping
         bin_counts = df['agebin'].value_counts()
         if reweight == 'inv':
-            weights = [1. / bin_counts[bin] for bin in df['agebin']] # todo: clipping?
+            num_per_label = [bin_counts[bin] for bin in df['agebin']]
         elif reweight == 'sqrt_inv':
-            weights = [1. / np.sqrt(bin_counts[bin]) for bin in df['agebin']] # todo: clipping?
-        scaling = len(weights) / sum(weights)
-        weights = [scaling * w for w in weights]
+            num_per_label = [np.sqrt(bin_counts[bin]) for bin in df['agebin']]
+        
+        if lds:
+            lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+            log(f'using lds: [{lds_kernel}] ({lds_ks}/{lds_sigma})')
+            smoothed_value = convolve1d(
+                np.asarray([v for _, v in bin_counts.items()]), weights=lds_kernel_window, mode='constant')
+            num_per_label = [smoothed_value[bin] for bin in df['agebin']]
+
+        weights = [1. / x for x in num_per_label]
+        scaling = len(weights) / np.sum(weights)
+        weights = [scaling * x for x in weights]
         return weights
 
     def __getitem__(self, idx):
@@ -73,6 +84,12 @@ def parse_options():
 
     parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none')
     parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none')
+
+    parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
+    parser.add_argument('--lds_kernel', type=str, default='gaussian',
+                        choices=['gaussian', 'triang', 'laplace'], help='LDS kernel type')
+    parser.add_argument('--lds_ks', type=int, default=9, help='LDS kernel size: should be odd number')
+    parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
 
     ## For testing purposes only
     parser.add_argument('--cpu', action='store_true')
@@ -232,7 +249,7 @@ def main():
     df = load_samples(split_fnames, opts.max_samples)
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
     train_df = resample(train_df, mode=opts.sample)
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight)
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
