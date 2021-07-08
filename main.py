@@ -285,7 +285,7 @@ def main():
         bin_dataset = AgePredictionDataset(bin_df)
         bin_loader = DataLoader(bin_dataset, batch_size=opts.batch_size)
         
-        bin_loss = validate(model, criterion, bin_loader, use_cpu=opts.cpu)
+        bin_loss = validate(model, criterion, bin_loader, device)
         bin_losses.append(bin_loss)
     
     ## Save results so we can plot them later
