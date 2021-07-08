@@ -295,8 +295,8 @@ def main():
     with open(f"{results_dir}/config.json", 'w+') as cfg_file:
         cfg = vars(opts)
         cfg['start_time'] = START_TIME
-        #cfg['train_counts'] = dict(train_df['agebin'].value_counts())
-        #cfg['val_counts'] = dict(val_df['agebin'].value_counts())
+        cfg['train_counts'] = json.loads(train_df['agebin'].value_counts().to_json())
+        cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
         json.dump(cfg, cfg_file, sort_keys=True, indent=4)
     
     if opts.eval is None:
