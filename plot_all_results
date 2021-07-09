@@ -3,11 +3,19 @@
 module load anaconda3
 source activate james
 
-runs=(20210627_115812 20210627_172306 20210629_141530 20210627_121213 20210627_120021 20210629_141522 20210627_121223 20210627_165542 20210629_160338 20210629_122659)
+script_dir="$(dirname "${BASH_SOURCE[0]}")"
 
-for run in ${runs[@]}; do
-    echo "Generating plots in figures/$run/"
-    python plot_results.py $run
+cd "$script_dir/results"
+for run in *; do
+    pushd "$run"
+    if [[ -f config.json &&
+          -f train_losses_during_training.txt &&
+          -f val_losses_during_training.txt && 
+          -f best_model_val_losses_per_bin.txt ]]; then
+        echo "Generating plots in figures/$run"
+        python "$script_dir/plot_results.py" "$run"
+    fi
+    popd
 done
 
 echo "Done"
