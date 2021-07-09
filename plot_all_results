@@ -3,11 +3,11 @@
 module load anaconda3
 source activate james
 
-script_dir="$(dirname "${BASH_SOURCE[0]}")"
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 cd "$script_dir/results"
 for run in *; do
-    pushd "$run"
+    pushd "$run" >/dev/null
     if [[ -f config.json &&
           -f train_losses_during_training.txt &&
           -f val_losses_during_training.txt && 
@@ -15,7 +15,7 @@ for run in *; do
         echo "Generating plots in figures/$run"
         python "$script_dir/plot_results.py" "$run"
     fi
-    popd
+    popd >/dev/null
 done
 
 echo "Done"
