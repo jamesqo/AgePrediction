@@ -5,10 +5,8 @@ import json
 import os
 import random
 
-import nibabel
 import numpy as np
 import pandas as pd
-from scipy.ndimage import convolve1d
 from sklearn.model_selection import train_test_split
 import torch
 from torch import nn
@@ -18,7 +16,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 from torchvision import models
 
-from lds import get_lds_kernel_window
+from dataset import AgePredictionDataset
 from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -30,60 +28,20 @@ def log(message):
     with open(LOG_FILE, 'a+') as log_file:
         log_file.write(f"{message}\n")
 
-class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, **kwargs):
-        self.df = df
-        self.weights = self._prepare_weights(df, **kwargs)
-    
-    def _prepare_weights(df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1):
-        if reweight == 'none':
-            return None
-        
-        # todo: clipping
-        bin_counts = df['agebin'].value_counts()
-        if reweight == 'inv':
-            num_per_label = [bin_counts[bin] for bin in df['agebin']]
-        elif reweight == 'sqrt_inv':
-            num_per_label = [np.sqrt(bin_counts[bin]) for bin in df['agebin']]
-        
-        if lds:
-            lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
-            log(f'using lds: [{lds_kernel}] ({lds_ks}/{lds_sigma})')
-            smoothed_value = convolve1d(
-                np.asarray([v for _, v in bin_counts.items()]), weights=lds_kernel_window, mode='constant')
-            num_per_label = [smoothed_value[bin] for bin in df['agebin']]
-
-        weights = [1. / x for x in num_per_label]
-        scaling = len(weights) / np.sum(weights)
-        weights = [scaling * x for x in weights]
-        return weights
-
-    def __getitem__(self, idx):
-        row = self.df.iloc[idx]
-        image = nibabel.load(row['path']).get_fdata()
-        image = image[54:184, 25:195, 12:132] # Crop out zeroes
-        image /= np.percentile(image, 95) # Normalize intensity
-        age = row['age']
-        weight = self.weights[idx] if self.weights is not None else 1.
-        return (image, age, weight)
-
-    def __len__(self):
-        return len(self.df)
-
 def parse_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('arch', type=str)
 
-    parser.add_argument('--batch-size', type=int, default=5)
-    parser.add_argument('--n-epochs', type=int, default=30)
-    parser.add_argument('--initial-lr', type=float, default=1e-3)
-    parser.add_argument('--step-size', type=int, default=10)
-    parser.add_argument('--gamma', type=float, default=0.5)
-    parser.add_argument('--weight-decay', type=float, default=1e-6)
+    parser.add_argument('--batch-size', type=int, default=5, help='batch size')
+    parser.add_argument('--n-epochs', type=int, default=30, help='number of epochs')
+    parser.add_argument('--initial-lr', type=float, default=1e-3, help='initial learning rate')
+    parser.add_argument('--step-size', type=int, default=10, help='learning rate decay period')
+    parser.add_argument('--gamma', type=float, default=0.5, help='learning rate decay factor')
+    parser.add_argument('--weight-decay', type=float, default=1e-6, help='weight decay')
 
-    parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none')
-    parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none')
+    parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none', help='sampling strategy')
+    parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none', help='reweighting strategy')
 
     parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
     parser.add_argument('--lds_kernel', type=str, default='gaussian',
@@ -92,12 +50,12 @@ def parse_options():
     parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
 
     ## For testing purposes only
-    parser.add_argument('--cpu', action='store_true')
-    parser.add_argument('--eval', type=str)
-    parser.add_argument('--max-samples', type=int)
+    parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
+    parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
+    parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
 
     args = parser.parse_args()
-    assert (args.sample == 'none') or (args.reweight == 'none')
+    assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
 
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
