@@ -31,7 +31,7 @@ def log(message):
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str)
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8'])
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
     parser.add_argument('--n-epochs', type=int, default=30, help='number of epochs')

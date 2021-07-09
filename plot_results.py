@@ -22,7 +22,7 @@ def main():
     with open(f"{results_dir}/config.json") as cfg_file:
         cfg = json.load(cfg_file)
 
-    cfg_desc = f"{cfg['arch']} / {cfg['sampling_mode']}"
+    cfg_desc = f"{cfg['arch']} / {cfg['sample']} / {cfg['reweight']}"
 
     n_epochs = len(train_losses)
     plt.title(cfg_desc)
@@ -31,7 +31,7 @@ def main():
     plt.plot(range(n_epochs), train_losses, label="Training loss")
     plt.plot(range(n_epochs), val_losses, label="Validation loss")
     plt.legend()
-    plt.savefig(f"{figures_dir}/train_and_val_losses_over_time.png")
+    plt.savefig(f"{figures_dir}/train_and_val_losses_during_training.png")
     plt.clf()
 
     n_bins = len(val_losses_per_bin)
@@ -41,7 +41,7 @@ def main():
     plt.ylabel("MAE")
     plt.xticks(rotation='vertical')
     plt.bar(bins, val_losses_per_bin)
-    plt.savefig(f"{figures_dir}/val_losses_per_bin.png")
+    plt.savefig(f"{figures_dir}/best_model_val_losses_per_bin.png")
     plt.clf()
 
 if __name__ == '__main__':
