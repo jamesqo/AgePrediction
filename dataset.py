@@ -20,7 +20,7 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
         lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
         smoothed_value = convolve1d(
             np.asarray([v for _, v in bin_counts.items()]), weights=lds_kernel_window, mode='constant')
-        num_per_label = [smoothed_value[bin] for bin in df['agebin']]
+        num_per_label = [smoothed_value[int(bin)] for bin in df['agebin']]
 
     weights = [1. / x for x in num_per_label]
     scaling = len(weights) / np.sum(weights)
