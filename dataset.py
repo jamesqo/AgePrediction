@@ -9,8 +9,8 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     if reweight == 'none':
         return None
     
-    # todo: clipping
     bin_counts = df['agebin'].value_counts()
+    bin_counts = bin_counts.apply(lambda x: np.clip(x, 10, 1000))
     if reweight == 'inv':
         num_per_label = [bin_counts[bin] for bin in df['agebin']]
     elif reweight == 'sqrt_inv':
