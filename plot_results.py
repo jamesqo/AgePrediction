@@ -16,9 +16,9 @@ def main():
     figures_dir = os.path.join(SCRIPT_DIR, "figures", opts.run)
     os.makedirs(figures_dir, exist_ok=True)
 
-    train_losses = np.loadtxt(f"{results_dir}/train_losses_during_training.txt")
-    val_losses = np.loadtxt(f"{results_dir}/val_losses_during_training.txt")
-    val_losses_per_bin = np.loadtxt(f"{results_dir}/best_model_val_losses_per_bin.txt")
+    train_losses = np.loadtxt(f"{results_dir}/train_losses_over_time.txt")
+    val_losses = np.loadtxt(f"{results_dir}/val_losses_over_time.txt")
+    val_losses_per_bin = np.loadtxt(f"{results_dir}/best_model_val_losses.txt")
     with open(f"{results_dir}/config.json") as cfg_file:
         cfg = json.load(cfg_file)
 
@@ -33,7 +33,7 @@ def main():
     plt.plot(range(n_epochs), train_losses, label="Training loss")
     plt.plot(range(n_epochs), val_losses, label="Validation loss")
     plt.legend()
-    plt.savefig(f"{figures_dir}/train_and_val_losses_during_training.png")
+    plt.savefig(f"{figures_dir}/train_and_val_losses.png")
     plt.clf()
 
     n_bins = len(val_losses_per_bin)
@@ -43,7 +43,7 @@ def main():
     plt.ylabel("MAE")
     plt.xticks(rotation='vertical')
     plt.bar(bins, val_losses_per_bin)
-    plt.savefig(f"{figures_dir}/best_model_val_losses_per_bin.png")
+    plt.savefig(f"{figures_dir}/best_model_val_losses.png")
     plt.clf()
 
 if __name__ == '__main__':

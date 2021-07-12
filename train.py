@@ -75,7 +75,7 @@ def load_samples(split_fnames, max_samples=None):
 
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
         df['path'] = df['path'].apply(correct_path)
-        df['agebin'] = df['age'] // 5
+        df['agebin'] = np.minimum(df['age'] // 5, 17) # Group subjects that are 85+ into one category
         df['split'] = split_num
         dfs.append(df)
     
@@ -101,11 +101,7 @@ def resample(df, mode):
     max_count = count_samples(max_bin)
     log(f"Max bin is {max_bin} with {max_count} samples")
 
-    # The actual min agebin could have a very small number of samples, so instead
-    # use the smallest one with a sample count >= the 10th percentile.
-    min_min_count = np.percentile(bin_counts, 10)
-    log(f"10th percentile of bin counts: {min_min_count}")
-    min_bin = min([bin for bin in bins if count_samples(bin) >= min_min_count], key=count_samples)
+    min_bin = min(bins, key=count_samples)
     min_count = count_samples(min_bin)
     log(f"Min bin is {min_bin} with {min_count} samples")
 
@@ -121,7 +117,7 @@ def resample(df, mode):
     elif mode == 'under':
         for bin in bins:
             n_over = count_samples(bin) - min_count
-            if n_over <= 0:
+            if n_over == 0:
                 continue
             new_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
             df = df[df['agebin'] != bin]
@@ -288,9 +284,9 @@ def main():
         json.dump(cfg, cfg_file, sort_keys=True, indent=4)
     
     if opts.eval is None:
-        np.savetxt(f"{results_dir}/train_losses_during_training.txt", train_losses)
-        np.savetxt(f"{results_dir}/val_losses_during_training.txt", val_losses)
-    np.savetxt(f"{results_dir}/best_model_val_losses_per_bin.txt", bin_losses)
+        np.savetxt(f"{results_dir}/train_losses_over_time.txt", train_losses)
+        np.savetxt(f"{results_dir}/val_losses_over_time.txt", val_losses)
+    np.savetxt(f"{results_dir}/best_model_val_losses.txt", bin_losses)
     
 
 if __name__ == '__main__':
