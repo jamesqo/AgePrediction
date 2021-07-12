@@ -23,6 +23,8 @@ def main():
         cfg = json.load(cfg_file)
 
     cfg_desc = f"{cfg['arch']} / {cfg['sample']} / {cfg['reweight']}"
+    if cfg['lds']:
+        cfg_desc += f" (lds: {cfg['lds_kernel']} / {cfg['lds_ks']} / {cfg['lds_sigma']})"
 
     n_epochs = len(train_losses)
     plt.title(cfg_desc)
