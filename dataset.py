@@ -9,17 +9,18 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     if reweight == 'none':
         return None
     
-    bin_counts = df['agebin'].value_counts()
+    bin_counts = df['agebin2'].value_counts()
+    bin_counts = bin_counts.apply(lambda x: np.clip(x, 10, 1000))
     if reweight == 'inv':
-        num_per_label = [bin_counts[bin] for bin in df['agebin']]
+        num_per_label = [bin_counts[bin] for bin in df['agebin2']]
     elif reweight == 'sqrt_inv':
-        num_per_label = [np.sqrt(bin_counts[bin]) for bin in df['agebin']]
+        num_per_label = [np.sqrt(bin_counts[bin]) for bin in df['agebin2']]
     
     if lds:
         lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
         smoothed_value = convolve1d(
             np.asarray([v for _, v in bin_counts.items()]), weights=lds_kernel_window, mode='constant')
-        num_per_label = [smoothed_value[int(bin)] for bin in df['agebin']]
+        num_per_label = [smoothed_value[int(bin)] for bin in df['agebin2']]
 
     weights = [1. / x for x in num_per_label]
     scaling = len(weights) / np.sum(weights)

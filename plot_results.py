@@ -37,7 +37,7 @@ def main():
     plt.clf()
 
     n_bins = len(val_losses_per_bin)
-    bins = [f"{5*i}-{5*i+4}" for i in range(n_bins)]
+    bins = range(n_bins)
     plt.title(cfg_desc)
     plt.xlabel("Age bin")
     plt.ylabel("MAE")

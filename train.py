@@ -25,6 +25,8 @@ START_TIME = datetime.now().strftime('%Y%m%d_%H%M%S')
 LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{START_TIME}.log")
 
 def log(message):
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
     with open(LOG_FILE, 'a+') as log_file:
         log_file.write(f"{message}\n")
 
@@ -76,6 +78,7 @@ def load_samples(split_fnames, max_samples=None):
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
         df['path'] = df['path'].apply(correct_path)
         df['agebin'] = np.minimum(df['age'] // 5, 17) # Group subjects that are 85+ into one category
+        df['agebin2'] = df['age'] // 1
         df['split'] = split_num
         dfs.append(df)
     
@@ -201,7 +204,7 @@ def main():
     assert len(split_fnames) == 5
 
     df = load_samples(split_fnames, opts.max_samples)
-    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
+    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin2'])
     train_df = resample(train_df, mode=opts.sample)
     train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
     val_dataset = AgePredictionDataset(val_df)
@@ -262,10 +265,10 @@ def main():
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth")
     model.load_state_dict(checkpoint)
     
-    bins = sorted(set(df['agebin']))
+    bins = sorted(set(df['agebin2']))
     bin_losses = []
     for bin in bins:
-        bin_df = val_df[val_df['agebin'] == bin]
+        bin_df = val_df[val_df['agebin2'] == bin]
         bin_dataset = AgePredictionDataset(bin_df)
         bin_loader = data.DataLoader(bin_dataset, batch_size=opts.batch_size)
         
@@ -279,8 +282,8 @@ def main():
     with open(f"{results_dir}/config.json", 'w+') as cfg_file:
         cfg = vars(opts)
         cfg['start_time'] = START_TIME
-        cfg['train_counts'] = json.loads(train_df['agebin'].value_counts().to_json())
-        cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
+        cfg['train_counts'] = json.loads(train_df['agebin2'].value_counts().to_json())
+        cfg['val_counts'] = json.loads(val_df['agebin2'].value_counts().to_json())
         json.dump(cfg, cfg_file, sort_keys=True, indent=4)
     
     if opts.eval is None:
