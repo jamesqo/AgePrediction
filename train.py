@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import random
+import sys
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,8 @@ def parse_options():
 
     parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none', help='sampling strategy')
     parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none', help='reweighting strategy')
+    parser.add_argument('--bin-width', type=int, default=1, help='width of age bins')
+    parser.add_argument('--min-bin-count', type=int, default=10, help='minimum number of samples per age bin')
 
     parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
     parser.add_argument('--lds_kernel', type=str, default='gaussian',
@@ -55,6 +58,7 @@ def parse_options():
     parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
     parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
     parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
+    parser.add_argument('--print-bin-counts', action='store_true', help='print age bin counts and exit')
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
@@ -64,7 +68,7 @@ def parse_options():
     log('='*20)
     return args
 
-def load_samples(split_fnames, max_samples=None):
+def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
     def correct_path(path):
         path = path.replace('/ABIDE/', '/ABIDE_I/')
         path = path.replace('/NIH-PD/', '/NIH_PD/')
@@ -77,12 +81,16 @@ def load_samples(split_fnames, max_samples=None):
 
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
         df['path'] = df['path'].apply(correct_path)
-        df['agebin'] = np.minimum(df['age'] // 5, 17) # Group subjects that are 85+ into one category
-        df['agebin2'] = df['age'] // 1
+        df['agebin'] = df['age'] // bin_width
         df['split'] = split_num
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
+
+    if min_bin_count is not None:
+        bin_counts = combined_df['agebin'].value_counts()
+        bins_below_cutoff = [bin for bin in bin_counts.keys() if bin_counts[bin] < min_bin_count]
+        combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
     
     if max_samples is not None:
         combined_df = combined_df.sample(max_samples)
@@ -203,9 +211,18 @@ def main():
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
-    df = load_samples(split_fnames, opts.max_samples)
-    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin2'])
-    train_df = resample(train_df, mode=opts.sample)
+    df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
+    _train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
+    train_df = resample(_train_df, mode=opts.sample)
+
+    if opts.print_bin_counts:
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            log(df['agebin'].value_counts())
+            log(_train_df['agebin'].value_counts())
+            log(train_df['agebin'].value_counts())
+            log(val_df['agebin'].value_counts())
+        sys.exit(0)
+
     train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
     val_dataset = AgePredictionDataset(val_df)
 
@@ -265,31 +282,32 @@ def main():
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth")
     model.load_state_dict(checkpoint)
     
-    bins = sorted(set(df['agebin2']))
-    bin_losses = []
+    bins = sorted(set(df['agebin']))
+    bin_losses = {}
     for bin in bins:
-        bin_df = val_df[val_df['agebin2'] == bin]
+        bin_df = val_df[val_df['agebin'] == bin]
         bin_dataset = AgePredictionDataset(bin_df)
         bin_loader = data.DataLoader(bin_dataset, batch_size=opts.batch_size)
         
         bin_loss = validate(model, bin_loader, device)
-        bin_losses.append(bin_loss)
+        bin_losses[bin] = bin_loss
     
     ## Save results so we can plot them later
 
     log("Saving results")
     
-    with open(f"{results_dir}/config.json", 'w+') as cfg_file:
+    with open(f"{results_dir}/config.json", 'w+') as f:
         cfg = vars(opts)
         cfg['start_time'] = START_TIME
-        cfg['train_counts'] = json.loads(train_df['agebin2'].value_counts().to_json())
-        cfg['val_counts'] = json.loads(val_df['agebin2'].value_counts().to_json())
-        json.dump(cfg, cfg_file, sort_keys=True, indent=4)
+        cfg['train_counts'] = json.loads(train_df['agebin'].value_counts().to_json())
+        cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
+        json.dump(cfg, f, sort_keys=True, indent=4)
     
     if opts.eval is None:
         np.savetxt(f"{results_dir}/train_losses_over_time.txt", train_losses)
         np.savetxt(f"{results_dir}/val_losses_over_time.txt", val_losses)
-    np.savetxt(f"{results_dir}/best_model_val_losses.txt", bin_losses)
+    with open(f"{results_dir}/best_model_val_losses.txt", 'w+') as f:
+        json.dump(bin_losses, f, sort_keys=True, indent=4)
     
 
 if __name__ == '__main__':

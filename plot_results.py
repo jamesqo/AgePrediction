@@ -18,9 +18,10 @@ def main():
 
     train_losses = np.loadtxt(f"{results_dir}/train_losses_over_time.txt")
     val_losses = np.loadtxt(f"{results_dir}/val_losses_over_time.txt")
-    val_losses_per_bin = np.loadtxt(f"{results_dir}/best_model_val_losses.txt")
-    with open(f"{results_dir}/config.json") as cfg_file:
-        cfg = json.load(cfg_file)
+    with open(f"{results_dir}/best_model_val_losses.txt") as f:
+        val_losses_per_bin = json.load(f)
+    with open(f"{results_dir}/config.json") as f:
+        cfg = json.load(f)
 
     cfg_desc = f"{cfg['arch']} / {cfg['sample']} / {cfg['reweight']}"
     if cfg['lds']:
@@ -36,8 +37,7 @@ def main():
     plt.savefig(f"{figures_dir}/train_and_val_losses.png")
     plt.clf()
 
-    n_bins = len(val_losses_per_bin)
-    bins = range(n_bins)
+    bins = val_losses_per_bin.keys()
     plt.title(cfg_desc)
     plt.xlabel("Age bin")
     plt.ylabel("MAE")
