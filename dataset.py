@@ -1,5 +1,6 @@
 import nibabel
 import numpy as np
+import pandas as pd
 from scipy.ndimage import convolve1d
 from torch.utils import data
 
@@ -17,9 +18,10 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     
     if lds:
         lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
-        smoothed_value = convolve1d(
-            np.asarray([v for _, v in bin_counts.items()]), weights=lds_kernel_window, mode='constant')
-        num_per_label = [smoothed_value[int(bin)] for bin in df['agebin']]
+        smoothed_value = pd.Series(
+            convolve1d(bin_counts.values, weights=lds_kernel_window, mode='constant'),
+            index=bin_counts.index)
+        num_per_label = [smoothed_value[bin] for bin in df['agebin']]
 
     weights = [1. / x for x in num_per_label]
     scaling = len(weights) / np.sum(weights)

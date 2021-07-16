@@ -104,9 +104,9 @@ def resample(df, mode):
     log("Resampling training data")
 
     bins = sorted(set(df['agebin']))
-    bin_counts = [count_samples(bin) for bin in bins]
-    bin_ratios = [count / df.shape[0] for count in bin_counts]
-    log(f"Bin counts: {dict(zip(bins, bin_counts))}")
+    bin_counts = {bin: count_samples(bin) for bin in bins}
+    bin_ratios = {bin: count / df.shape[0] for bin, count in bin_counts.items()}
+    log(f"Bin counts: {bin_counts}")
 
     max_bin = max(bins, key=count_samples)
     max_count = count_samples(max_bin)
@@ -136,14 +136,14 @@ def resample(df, mode):
     elif mode == 'scale-up':
         target_count = max_count * len(bins)
         for bin in bins:
-            count = int(bin_ratios[int(bin)] * target_count)
+            count = int(bin_ratios[bin] * target_count)
             new_samples = df[df['agebin'] == bin].sample(count, replace=True)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
     elif mode == 'scale-down':
         target_count = min_count * len(bins)
         for bin in bins:
-            count = int(bin_ratios[int(bin)] * target_count)
+            count = int(bin_ratios[bin] * target_count)
             new_samples = df[df['agebin'] == bin].sample(count, replace=False)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
