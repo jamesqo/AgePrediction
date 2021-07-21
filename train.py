@@ -22,8 +22,8 @@ from vgg import VGG8
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SPLITS_DIR = os.path.join(SCRIPT_DIR, "folderlist")
-START_TIME = datetime.now().strftime('%Y%m%d_%H%M%S')
-LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{START_TIME}.log")
+START_TIME = datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
+LOG_FILE = ''
 
 def log(message):
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -35,6 +35,7 @@ def parse_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8'])
+    parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
     parser.add_argument('--n-epochs', type=int, default=30, help='number of epochs')
@@ -62,6 +63,9 @@ def parse_options():
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
+
+    global LOG_FILE
+    LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{args.job_id}.log")
 
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
@@ -200,8 +204,11 @@ def main():
 
     opts = parse_options()
 
-    checkpoint_dir = os.path.join(SCRIPT_DIR, "checkpoints", opts.eval or START_TIME)
-    results_dir = os.path.join(SCRIPT_DIR, "results", START_TIME)
+    log(f"Starting at {START_TIME}")
+    log(f"Job ID: {opts.job_id}")
+
+    checkpoint_dir = os.path.join(SCRIPT_DIR, "checkpoints", opts.eval or opts.job_id)
+    results_dir = os.path.join(SCRIPT_DIR, "results", opts.job_id)
     
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)

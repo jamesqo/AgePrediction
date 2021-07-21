@@ -25,5 +25,4 @@ for config in "${configs[@]}"; do
     command="sbatch slurm $config"
     echo "Running: $command"
     eval "$command"
-    sleep 1m
 done

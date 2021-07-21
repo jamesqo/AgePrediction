@@ -1,13 +1,12 @@
 #!/bin/bash
 
-#SBATCH --partition=bch-gpu
+#SBATCH --partition=fnndsc-gpu
 #SBATCH --time=120:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:Titan_RTX:1
 #SBATCH --output=logs/slurm-%j.out
-#SBATCH --requeue
 
 module load anaconda3
 source activate james
 pip install --user -r requirements.txt
-python train.py "$@"
+python train.py --job-id $SLURM_JOB_ID "$@"
