@@ -205,7 +205,6 @@ def main():
     opts = parse_options()
 
     log(f"Starting at {START_TIME}")
-    log(f"Job ID: {opts.job_id}")
 
     checkpoint_dir = os.path.join(SCRIPT_DIR, "checkpoints", opts.eval or opts.job_id)
     results_dir = os.path.join(SCRIPT_DIR, "results", opts.job_id)

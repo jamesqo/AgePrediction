@@ -21,8 +21,12 @@ configs=(
     "vgg8 --reweight sqrt_inv --lds"
 )
 
-for config in "${configs[@]}"; do
-    command="sbatch slurm $config"
-    echo "Running: $command"
-    eval "$command"
+# Run the jobs in batches of 4
+for (( idx=0; idx<${#configs[@]}; idx += 4 )); do
+    for config in "${configs[@]:$idx:4}"; do
+        command="sbatch slurm $config"
+        echo "Running: $command"
+        eval "$command"
+    done
+    sleep 1d
 done
