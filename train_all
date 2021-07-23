@@ -1,0 +1,32 @@
+#!/bin/bash
+
+configs=(
+    "resnet18"
+    "vgg8"
+    "resnet18 --sample over"
+    "vgg8 --sample over"
+    "resnet18 --sample under"
+    "vgg8 --sample under"
+    "resnet18 --sample scale-up"
+    "vgg8 --sample scale-up"
+    "resnet18 --sample scale-down"
+    "vgg8 --sample scale-down"
+    "resnet18 --reweight inv"
+    "vgg8 --reweight inv"
+    "resnet18 --reweight sqrt_inv"
+    "vgg8 --reweight sqrt_inv"
+    "resnet18 --reweight inv --lds"
+    "vgg8 --reweight inv --lds"
+    "resnet18 --reweight sqrt_inv --lds"
+    "vgg8 --reweight sqrt_inv --lds"
+)
+
+# Run the jobs in batches of 4
+for (( idx=0; idx<${#configs[@]}; idx += 4 )); do
+    for config in "${configs[@]:$idx:4}"; do
+        command="sbatch slurm $config"
+        echo "Running: $command"
+        eval "$command"
+    done
+    sleep 1d
+done
