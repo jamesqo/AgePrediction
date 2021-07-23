@@ -66,6 +66,10 @@ def parse_options():
 
     global LOG_FILE
     LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{args.job_id}.log")
+    try:
+        os.remove(LOG_FILE)
+    except FileNotFoundError:
+        pass
 
     for arg in vars(args):
         log(f"{arg}: {getattr(args, arg)}")
@@ -157,6 +161,19 @@ def resample(df, mode):
     log(f"Number of samples in final training dataset: {df.shape[0]}")
     return df
 
+def setup_model(arch, device):
+    if arch == 'resnet18':
+        model = models.resnet18(num_classes=1)
+        # Set the number of input channels to 130
+        model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    elif arch == 'vgg8':
+        model = VGG8(in_channels=130, num_classes=1)
+    else:
+        raise Exception(f"Invalid arch: {arch}")
+    model.double()
+    model.to(device)
+    return model
+
 def train(model, optimizer, train_loader, device):
     def weighted_l1_loss(inputs, targets, weights):
         loss = F.l1_loss(inputs, targets, reduction='none')
@@ -186,16 +203,23 @@ def validate(model, val_loader, device):
     model.eval()
 
     losses = []
+    all_preds = []
 
     with torch.no_grad():
         for (images, ages, _) in val_loader:
+            # When batch_size=1 DataLoader doesn't convert the data to Tensors
+            if not torch.is_tensor(images):
+                images = torch.tensor(images).unsqueeze(0)
+            if not torch.is_tensor(ages):
+                ages = torch.tensor(ages).unsqueeze(0)
             images, ages = images.to(device), ages.to(device)
             age_preds = model(images).view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
+            all_preds.extend(age_preds)
     
-    return np.mean(losses)
+    return np.mean(losses), torch.stack(all_preds).cpu().numpy()
 
 def main():
     random.seed(0)
@@ -233,29 +257,18 @@ def main():
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
-    val_loader = data.DataLoader(val_dataset, batch_size=opts.batch_size)
+    val_loader = data.DataLoader(val_dataset, batch_size=1)
 
     log("Setting up model")
 
-    if opts.arch == 'resnet18':
-        model = models.resnet18(num_classes=1)
-        # Set the number of input channels to 130
-        model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    elif opts.arch == 'vgg8':
-        model = VGG8(in_channels=130, num_classes=1)
-    else:
-        raise Exception(f"Invalid arch: {opts.arch}")
-    model.double()
     device = torch.device('cpu' if opts.cpu else 'cuda')
-    model.to(device)
-
+    model = setup_model(opts.arch, device)
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
 
+    ## Training and evaluation
+
     if opts.eval is None:
-
-        ## Training process
-
         log("Starting training process")
 
         best_epoch = None
@@ -267,7 +280,7 @@ def main():
             log(f"Epoch {epoch}/{opts.n_epochs}")
             train_loss = train(model, optimizer, train_loader, device)
             log(f"Mean training loss: {train_loss}")
-            val_loss = validate(model, val_loader, device)
+            val_loss, _ = validate(model, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
@@ -281,22 +294,12 @@ def main():
         
         log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
     
-    ## Evaluation
-
     log("Evaluating best model on val dataset")
    
-    checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth")
+    checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth", map_location=device)
     model.load_state_dict(checkpoint)
     
-    bins = sorted(set(df['agebin']))
-    bin_losses = {}
-    for bin in bins:
-        bin_df = val_df[val_df['agebin'] == bin]
-        bin_dataset = AgePredictionDataset(bin_df)
-        bin_loader = data.DataLoader(bin_dataset, batch_size=opts.batch_size)
-        
-        bin_loss = validate(model, bin_loader, device)
-        bin_losses[bin] = bin_loss
+    _, best_val_preds = validate(model, val_dataset, device)
     
     ## Save results so we can plot them later
 
@@ -312,9 +315,10 @@ def main():
     if opts.eval is None:
         np.savetxt(f"{results_dir}/train_losses_over_time.txt", train_losses)
         np.savetxt(f"{results_dir}/val_losses_over_time.txt", val_losses)
-    with open(f"{results_dir}/best_model_val_losses.txt", 'w+') as f:
-        json.dump(bin_losses, f, sort_keys=True, indent=4)
-    
+
+    val_df_with_preds = val_df.copy()
+    val_df_with_preds['age_pred'] = best_val_preds
+    val_df_with_preds.to_csv(f"{results_dir}/best_model_val_preds.csv", index=False)
 
 if __name__ == '__main__':
     main()
