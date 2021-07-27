@@ -36,8 +36,9 @@ dataframe = ...
 
 """
 Parameters:
-- arch: CNN architecture to use. 'resnet18' or 'vgg8'
+- architecture: CNN architecture to use. 'resnet18' or 'vgg8'
+- sampling_mode: The sampling strategy that was used during model training. 'none', 'over', 'under', 'scale-up', or 'scale-down'
 - device: Where the model should be evaluated. 'cpu' or 'gpu'
 """
-predict_ages(dataframe, arch=..., device=...)
+predict_ages(dataframe, architecture=..., sampling_mode=..., device=...)
 ```
