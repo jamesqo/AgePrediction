@@ -5,19 +5,20 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('run', type=str)
     opts = parser.parse_args()
 
-    results_dir = os.path.join(SCRIPT_DIR, "results", opts.run)
-    figures_dir = os.path.join(SCRIPT_DIR, "figures", opts.run)
+    results_dir = os.path.join(ROOT_DIR, "results", opts.run)
+    figures_dir = os.path.join(ROOT_DIR, "figures", opts.run)
     os.makedirs(figures_dir, exist_ok=True)
 
     train_losses = np.loadtxt(f"{results_dir}/train_losses_over_time.txt")
     val_losses = np.loadtxt(f"{results_dir}/val_losses_over_time.txt")
+    # todo: fix
     with open(f"{results_dir}/best_model_val_losses.txt") as f:
         val_losses_per_bin = json.load(f)
     with open(f"{results_dir}/config.json") as f:

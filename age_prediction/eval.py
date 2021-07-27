@@ -1,8 +1,8 @@
 import torch
 from torch.utils import data
 
-from dataset import AgePredictionDataset
-from train import setup_model, validate
+from .dataset import AgePredictionDataset
+from .train import setup_model, validate
 
 def predict_ages(df, arch='resnet18', device='cpu'):
     model_path = f'/neuro/labs/grantlab/MRI_Predict_Age/james.ko/AgePredictionModels/best_{arch}_model_trainedon_0_100.pth'

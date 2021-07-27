@@ -11,9 +11,9 @@ for run in *; do
     if [[ -f config.json &&
           -f train_losses_during_training.txt &&
           -f val_losses_during_training.txt && 
-          -f best_model_val_losses_per_bin.txt ]]; then
+          -f best_model_val_preds.csv ]]; then
         echo "Generating plots in figures/$run"
-        python "$script_dir/plot_results.py" "$run"
+        python "$script_dir/src/plot_results.py" "$run"
     fi
     popd >/dev/null
 done

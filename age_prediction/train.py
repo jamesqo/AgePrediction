@@ -17,11 +17,11 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 from torchvision import models
 
-from dataset import AgePredictionDataset
-from vgg import VGG8
+from .dataset import AgePredictionDataset
+from .vgg import VGG8
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-SPLITS_DIR = os.path.join(SCRIPT_DIR, "folderlist")
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+SPLITS_DIR = os.path.join(ROOT_DIR, "folderlist")
 START_TIME = datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
 LOG_FILE = ''
 
@@ -65,7 +65,7 @@ def parse_options():
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
 
     global LOG_FILE
-    LOG_FILE = os.path.join(SCRIPT_DIR, "logs", f"{args.job_id}.log")
+    LOG_FILE = os.path.join(ROOT_DIR, "logs", f"{args.job_id}.log")
     try:
         os.remove(LOG_FILE)
     except FileNotFoundError:
@@ -230,8 +230,8 @@ def main():
 
     log(f"Starting at {START_TIME}")
 
-    checkpoint_dir = os.path.join(SCRIPT_DIR, "checkpoints", opts.eval or opts.job_id)
-    results_dir = os.path.join(SCRIPT_DIR, "results", opts.job_id)
+    checkpoint_dir = os.path.join(ROOT_DIR, "checkpoints", opts.eval or opts.job_id)
+    results_dir = os.path.join(ROOT_DIR, "results", opts.job_id)
     
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)

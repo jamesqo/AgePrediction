@@ -10,4 +10,4 @@
 module load anaconda3
 source activate james
 pip install --user -r requirements.txt
-python train.py --job-id $SLURM_JOB_ID "$@"
+python src/train.py --job-id $SLURM_JOB_ID "$@"
