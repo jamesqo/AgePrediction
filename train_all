@@ -28,5 +28,6 @@ for (( idx=0; idx<${#configs[@]}; idx += 4 )); do
         echo "Running: $command"
         eval "$command"
     done
-    sleep 1d
+    #sleep 1d
+    sleep 5m
 done

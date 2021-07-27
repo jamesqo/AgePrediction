@@ -1,6 +1,7 @@
 #!/bin/bash
 
-#SBATCH --partition=bch-gpu
+#SBATCH --partition=fnndsc-gpu
+#SBATCH --account=fnndsc
 #SBATCH --time=120:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:Titan_RTX:1
