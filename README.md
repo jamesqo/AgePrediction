@@ -2,11 +2,12 @@
 
 ## Installation
 
-Clone this Git repository on E2:
+Clone this Git repository on E2 and switch to the `release` branch:
 
 ```
 ssh chXXXXXX@e2.tch.harvard.edu
 git clone git@github.com:jamesqo/AgePrediction.git
+git checkout release
 ```
 
 Create a virtual environment for your project:
