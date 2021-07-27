@@ -9,11 +9,11 @@ cd "$script_dir/results"
 for run in *; do
     pushd "$run" >/dev/null
     if [[ -f config.json &&
-          -f train_losses_during_training.txt &&
-          -f val_losses_during_training.txt && 
+          -f train_losses_over_time.txt &&
+          -f val_losses_over_time.txt && 
           -f best_model_val_preds.csv ]]; then
         echo "Generating plots in figures/$run"
-        python "$script_dir/src/plot_results.py" "$run"
+        python "$script_dir/age_prediction/plot_results.py" "$run"
     fi
     popd >/dev/null
 done

@@ -43,6 +43,8 @@ Optional parameters:
 - weighting: The reweighting strategy that was used during model training. 'none', 'inv', or 'sqrt_inv'
 - lds: Whether or not label distribution smoothing (LDS) was used during model training. True or False
 - device: Where the model should be evaluated. 'cpu' or 'gpu'
+
+Returns: a NumPy array containing the predicted ages
 """
 predict_ages(dataframe,
              architecture=...,
