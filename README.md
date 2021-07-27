@@ -35,10 +35,19 @@ This should be a Pandas DataFrame with two columns:
 dataframe = ...
 
 """
-Parameters:
+Optional parameters:
 - architecture: CNN architecture to use. 'resnet18' or 'vgg8'
+- age_range: The age range of the dataset that the model was trained on. '0-100'
 - sampling_mode: The sampling strategy that was used during model training. 'none', 'over', 'under', 'scale-up', or 'scale-down'
+- weighting: The reweighting strategy that was used during model training. 'none', 'inv', or 'sqrt_inv'
+- lds: Whether or not label distribution smoothing (LDS) was used during model training. True or False
 - device: Where the model should be evaluated. 'cpu' or 'gpu'
 """
-predict_ages(dataframe, architecture=..., sampling_mode=..., device=...)
+predict_ages(dataframe,
+             architecture=...,
+             age_range=...,
+             sampling_mode=...,
+             weighting=...,
+             lds=...,
+             device=...)
 ```

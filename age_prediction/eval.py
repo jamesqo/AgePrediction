@@ -6,9 +6,15 @@ from torch.utils import data
 from .dataset import AgePredictionDataset
 from .train import setup_model, validate
 
-def predict_ages(df, architecture='resnet18', sampling_mode='none', device='cpu'):
+def predict_ages(df,
+                 architecture='resnet18',
+                 age_range='0-100',
+                 sampling_mode='none',
+                 weighting='none',
+                 lds=False,
+                 device='cpu'):
     dirname = '/neuro/labs/grantlab/MRI_Predict_Age/james.ko/AgePredictionModels'
-    model_path = f'{dirname}/arch_{architecture}_sample_{sampling_mode}_trainedon_0-100.pth'
+    model_path = f'{dirname}/arch_{architecture}__agerange_{age_range}__sample_{sampling_mode}__reweight_{weighting}__lds_{lds}.pth'
     if not os.path.isfile(model_path):
         raise Exception(f"{model_path} doesn't exist")
     checkpoint = torch.load(model_path, map_location=device)
