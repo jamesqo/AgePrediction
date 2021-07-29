@@ -37,6 +37,7 @@ After you've finished writing your script, create a file called `slurm` in your 
 
 module load anaconda3
 source activate <env_name>
+PATH="~/.conda/envs/<env_name>/bin:$PATH"
 python my_script.py "$@"
 ```
 
