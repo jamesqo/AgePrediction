@@ -10,17 +10,34 @@ git clone git@github.com:jamesqo/AgePrediction.git
 git checkout release
 ```
 
-Create a virtual environment for your project:
+Create and activate a virtual environment for your project:
 
 ```
 cd /path/to/my/project
-conda create -n my_env_name python=3.6
+module load anaconda3
+conda create -n <env_name> python=3.6
+conda activate <env_name>
 ```
 
-Install the module:
+Install the module into your virtual environment:
 
 ```
 pip install -e /path/to/AgePrediction
+```
+
+After you've finished writing your script, create a file called `slurm` in your project directory with the following contents:
+
+```bash
+#!/bin/bash
+
+#SBATCH --partition=bch-gpu
+#SBATCH --time=120:00:00
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:Titan_RTX:1
+
+module load anaconda3
+source activate <env_name>
+python my_script.py "$@"
 ```
 
 ## Usage
@@ -53,4 +70,24 @@ predict_ages(dataframe,
              weighting=...,
              lds=...,
              device=...)
+```
+
+## SLURM Cheatsheet
+
+To submit a new job:
+
+```
+sbatch slurm <program args>
+```
+
+To view a list of running jobs:
+
+```
+squeue -u $USER
+```
+
+To cancel a job:
+
+```
+scancel <job_id>
 ```
