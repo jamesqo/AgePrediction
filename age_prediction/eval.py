@@ -1,18 +1,39 @@
 import os
 
+import pandas as pd
 import torch
 from torch.utils import data
 
 from .dataset import AgePredictionDataset
-from .train import setup_model, validate
+from .train import setup_model
 
-def predict_ages(df,
+def evaluate(model, dataloader, device):
+    model.eval()
+
+    all_preds = []
+
+    with torch.no_grad():
+        for (images, _, _) in dataloader:
+            # When batch_size=1 DataLoader doesn't convert the data to Tensors
+            if not torch.is_tensor(images):
+                images = torch.tensor(images).unsqueeze(0)
+            images = images.to(device)
+            age_preds = model(images).view(-1)
+
+            all_preds.extend(age_preds)
+    
+    return torch.stack(all_preds).cpu().numpy()
+
+def predict_ages(filenames,
                  architecture='resnet18',
                  age_range='0-100',
                  sampling_mode='none',
                  weighting='none',
                  lds=False,
-                 device='cpu'):
+                 device='gpu'):
+    if device == 'gpu' and not torch.cuda.is_available():
+        raise Exception("You need to be running this code from SLURM. See the README for instructions")
+
     dirname = '/neuro/labs/grantlab/MRI_Predict_Age/james.ko/AgePredictionModels'
     model_path = f'{dirname}/arch_{architecture}__agerange_{age_range}__sample_{sampling_mode}__reweight_{weighting}__lds_{lds}.pth'
     if not os.path.isfile(model_path):
@@ -21,8 +42,9 @@ def predict_ages(df,
     model = setup_model(architecture, device)
     model.load_state_dict(checkpoint)
 
+    df = pd.DataFrame({'path': filenames})
     dataset = AgePredictionDataset(df)
     dataloader = data.DataLoader(dataset)
-    _, age_preds = validate(model, dataloader, device)
+    _, age_preds = evaluate(model, dataloader, device)
 
-    return age_preds
+    return pd.DataFrame({'path': filenames, 'age_pred': age_preds})

@@ -46,24 +46,18 @@ python my_script.py "$@"
 from age_prediction.eval import predict_ages
 
 """
-This should be a Pandas DataFrame with two columns:
-- 'path' containing the path to the MRI image
-- 'age' containing the subject's true age
-"""
-dataframe = ...
-
-"""
-Optional parameters:
+Parameters:
+- filenames: List of filenames of the MRI images.
 - architecture: CNN architecture to use. 'resnet18' or 'vgg8'
 - age_range: The age range of the dataset that the model was trained on. '0-100'
 - sampling_mode: The sampling strategy that was used during model training. 'none', 'over', 'under', 'scale-up', or 'scale-down'
 - weighting: The reweighting strategy that was used during model training. 'none', 'inv', or 'sqrt_inv'
 - lds: Whether or not label distribution smoothing (LDS) was used during model training. True or False
-- device: Where the model should be evaluated. 'cpu' or 'gpu'
+- device: Where the model should be evaluated. 'gpu' or 'cpu'
 
-Returns: a NumPy array containing the predicted ages
+Returns: a Pandas DataFrame containing the predicted ages
 """
-predict_ages(dataframe,
+predict_ages(filenames,
              architecture=...,
              age_range=...,
              sampling_mode=...,
