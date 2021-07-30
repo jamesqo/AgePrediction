@@ -258,6 +258,15 @@ def main():
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = data.DataLoader(val_dataset, batch_size=1)
+    
+    ## Dump configuration info to a JSON file
+    
+    with open(f"{results_dir}/config.json", 'w+') as f:
+        cfg = vars(opts)
+        cfg['start_time'] = START_TIME
+        cfg['train_counts'] = json.loads(train_df['agebin'].value_counts().to_json())
+        cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
+        json.dump(cfg, f, sort_keys=True, indent=4)
 
     log("Setting up model")
 
@@ -304,13 +313,6 @@ def main():
     ## Save results so we can plot them later
 
     log("Saving results")
-    
-    with open(f"{results_dir}/config.json", 'w+') as f:
-        cfg = vars(opts)
-        cfg['start_time'] = START_TIME
-        cfg['train_counts'] = json.loads(train_df['agebin'].value_counts().to_json())
-        cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
-        json.dump(cfg, f, sort_keys=True, indent=4)
     
     if opts.eval is None:
         np.savetxt(f"{results_dir}/train_losses_over_time.txt", train_losses)

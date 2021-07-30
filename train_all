@@ -29,5 +29,5 @@ for (( idx=0; idx<${#configs[@]}; idx += 4 )); do
         eval "$command"
     done
     #sleep 1d
-    sleep 5m
+    #sleep 5m
 done
