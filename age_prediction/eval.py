@@ -13,7 +13,7 @@ def evaluate(model, dataloader, device):
     all_preds = []
 
     with torch.no_grad():
-        for (images, _, _) in dataloader:
+        for images in dataloader:
             # When batch_size=1 DataLoader doesn't convert the data to Tensors
             if not torch.is_tensor(images):
                 images = torch.tensor(images).unsqueeze(0)
@@ -30,11 +30,11 @@ def predict_ages(filenames,
                  sampling_mode='none',
                  weighting='none',
                  lds=False,
-                 device='gpu'):
-    if device == 'gpu' and not torch.cuda.is_available():
+                 device='cuda'):
+    if device == 'cuda' and not torch.cuda.is_available():
         raise Exception("You need to be running this code from SLURM. See the README for instructions")
 
-    dirname = '/neuro/labs/grantlab/MRI_Predict_Age/james.ko/AgePredictionModels'
+    dirname = '/neuro/labs/grantlab/research/MRI_Predict_Age/james.ko/AgePredictionModels'
     model_path = f'{dirname}/arch_{architecture}__agerange_{age_range}__sample_{sampling_mode}__reweight_{weighting}__lds_{lds}.pth'
     if not os.path.isfile(model_path):
         raise Exception(f"{model_path} doesn't exist")
@@ -43,8 +43,8 @@ def predict_ages(filenames,
     model.load_state_dict(checkpoint)
 
     df = pd.DataFrame({'path': filenames})
-    dataset = AgePredictionDataset(df)
+    dataset = AgePredictionDataset(df, labeled=False)
     dataloader = data.DataLoader(dataset)
-    _, age_preds = evaluate(model, dataloader, device)
+    age_preds = evaluate(model, dataloader, device)
 
     return pd.DataFrame({'path': filenames, 'age_pred': age_preds})

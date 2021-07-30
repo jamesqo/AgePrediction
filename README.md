@@ -53,7 +53,7 @@ Parameters:
 - sampling_mode: The sampling strategy that was used during model training. 'none', 'over', 'under', 'scale-up', or 'scale-down'
 - weighting: The reweighting strategy that was used during model training. 'none', 'inv', or 'sqrt_inv'
 - lds: Whether or not label distribution smoothing (LDS) was used during model training. True or False
-- device: Where the model should be evaluated. 'gpu' or 'cpu'
+- device: Where the model should be evaluated. 'cuda' or 'cpu'
 
 Returns: a Pandas DataFrame containing the predicted ages
 """

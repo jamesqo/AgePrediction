@@ -29,18 +29,22 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     return weights
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1):
+    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, labeled=True):
         self.df = df
         self.weights = prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma)
+        self.labeled = labeled
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         image = nibabel.load(row['path']).get_fdata()
         image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
-        age = row['age'] if 'age' in row else None
-        weight = self.weights[idx] if self.weights is not None else 1.
-        return (image, age, weight)
+        if self.labeled:
+            age = row['age']
+            weight = self.weights[idx] if self.weights is not None else 1.
+            return (image, age, weight)
+        else:
+            return image
 
     def __len__(self):
         return len(self.df)
