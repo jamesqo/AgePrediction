@@ -47,7 +47,8 @@ def parse_options():
     parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none', help='sampling strategy')
     parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none', help='reweighting strategy')
     parser.add_argument('--bin-width', type=int, default=1, help='width of age bins')
-    parser.add_argument('--min-bin-count', type=int, default=10, help='minimum number of samples per age bin')
+    parser.add_argument('--min-bin-count', type=int, default=10, help='minimum number of samples per age bin (bins with fewer samples will be removed)')
+    parser.add_argument('--oversamp-limit', type=int, default=126, help='maximum number of samples each age bin will be inflated to when oversampling (bins with more samples will be left as-is)')
 
     parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
     parser.add_argument('--lds_kernel', type=str, default='gaussian',
@@ -105,51 +106,39 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
     
     return combined_df
 
-def resample(df, mode):
-    def count_samples(bin):
-        return sum(df['agebin'] == bin)
-    
+def resample(df, mode, oversamp_limit):
     log("Resampling training data")
 
     bins = sorted(set(df['agebin']))
-    bin_counts = {bin: count_samples(bin) for bin in bins}
+    bin_counts = {bin: sum(df['agebin'] == bin) for bin in bins}
     bin_ratios = {bin: count / df.shape[0] for bin, count in bin_counts.items()}
     log(f"Bin counts: {bin_counts}")
 
-    max_bin = max(bins, key=count_samples)
-    max_count = count_samples(max_bin)
-    log(f"Max bin is {max_bin} with {max_count} samples")
-
-    min_bin = min(bins, key=count_samples)
-    min_count = count_samples(min_bin)
-    log(f"Min bin is {min_bin} with {min_count} samples")
+    undersamp_limit = min(bin_counts.values())
 
     if mode == 'none':
         pass
     elif mode == 'over':
         for bin in bins:
-            n_under = max_count - count_samples(bin)
-            if n_under == 0:
+            n_under = oversamp_limit - bin_counts[bin]
+            if n_under <= 0:
                 continue
             new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
             df = pd.concat([df, new_samples], axis=0)
     elif mode == 'under':
         for bin in bins:
-            n_over = count_samples(bin) - min_count
-            if n_over == 0:
+            n_over = bin_counts[bin] - undersamp_limit
+            if n_over <= 0:
                 continue
-            new_samples = df[df['agebin'] == bin].sample(min_count, replace=False)
+            new_samples = df[df['agebin'] == bin].sample(undersamp_limit, replace=False)
             df = df[df['agebin'] != bin]
             df = pd.concat([df, new_samples], axis=0)
-    elif mode == 'scale-up':
-        target_count = max_count * len(bins)
-        for bin in bins:
-            count = int(bin_ratios[bin] * target_count)
-            new_samples = df[df['agebin'] == bin].sample(count, replace=True)
-            df = df[df['agebin'] != bin]
-            df = pd.concat([df, new_samples], axis=0)
-    elif mode == 'scale-down':
-        target_count = min_count * len(bins)
+    elif mode == 'scale-up' or mode == 'scale-down':
+        if mode == 'scale-up':
+            target_count = sum([max(bin_counts[bin], oversamp_limit) for bin in bins])
+        else:
+            target_count = sum([min(bin_counts[bin], undersamp_limit) for bin in bins])
+
         for bin in bins:
             count = int(bin_ratios[bin] * target_count)
             new_samples = df[df['agebin'] == bin].sample(count, replace=False)
@@ -243,7 +232,7 @@ def main():
 
     df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
     _train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
-    train_df = resample(_train_df, mode=opts.sample)
+    train_df = resample(_train_df, mode=opts.sample, oversamp_limit=opts.oversamp_limit)
 
     if opts.print_bin_counts:
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
