@@ -18,6 +18,7 @@ from torch.utils import data
 from torchvision import models
 
 from .dataset import AgePredictionDataset
+from .sfcn import SFCN
 from .vgg import VGG8
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -38,7 +39,7 @@ def log(message):
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -167,13 +168,15 @@ def setup_model(arch, device):
         model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
     elif arch == 'vgg8':
         model = VGG8(in_channels=130, num_classes=1)
+    elif arch == 'sfcn':
+        model = SFCN(in_channels=1, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
     model.to(device)
     return model
 
-def train(model, optimizer, train_loader, device):
+def train(model, arch, optimizer, train_loader, device):
     def weighted_l1_loss(inputs, targets, weights):
         loss = F.l1_loss(inputs, targets, reduction='none')
         loss *= weights.expand_as(loss)
@@ -187,6 +190,8 @@ def train(model, optimizer, train_loader, device):
     for batch_idx, (images, ages, weights) in enumerate(train_loader):
         images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         optimizer.zero_grad()
+        if arch == 'sfcn':
+            images = images.unsqueeze(1)
         age_preds = model(images).view(-1)
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
@@ -198,7 +203,7 @@ def train(model, optimizer, train_loader, device):
     
     return np.mean(losses)
 
-def validate(model, val_loader, device):
+def validate(model, arch, val_loader, device):
     model.eval()
 
     losses = []
@@ -212,6 +217,8 @@ def validate(model, val_loader, device):
             if not torch.is_tensor(ages):
                 ages = torch.tensor(ages).unsqueeze(0)
             images, ages = images.to(device), ages.to(device)
+            if arch == 'sfcn':
+                images = images.unsqueeze(1)
             age_preds = model(images).view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
@@ -286,9 +293,9 @@ def main():
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")
-            train_loss = train(model, optimizer, train_loader, device)
+            train_loss = train(model, opts.arch, optimizer, train_loader, device)
             log(f"Mean training loss: {train_loss}")
-            val_loss, _ = validate(model, val_loader, device)
+            val_loss, _ = validate(model, opts.arch, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
@@ -307,7 +314,7 @@ def main():
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth", map_location=device)
     model.load_state_dict(checkpoint)
     
-    _, best_val_preds = validate(model, val_dataset, device)
+    _, best_val_preds = validate(model, opts.arch, val_dataset, device)
     
     ## Save results so we can plot them later
 
