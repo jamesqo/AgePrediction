@@ -5,6 +5,7 @@ import shutil
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 RESULTS_DIR = os.path.join(ROOT_DIR, "results")
@@ -81,12 +82,14 @@ def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
     
     bins = np.arange(18)
     display_bins = [5*bin for bin in bins]
+    df = list(all_results.values())[0]['val_preds']
+    bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
 
     if include_baseline:
         job_descs += ['none / none']
     for desc in job_descs:
-        key = f"{arch} / {desc}"
-        df = all_results[key]['val_preds']
+        full_desc = f"{arch} / {desc}"
+        df = all_results[full_desc]['val_preds']
         losses_per_bin = np.array([mae(bin, df) for bin in bins])
         
         # Smooth losses using a Gaussian kernel
@@ -100,9 +103,11 @@ def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
         ax.set_xticks(display_bins)
         is_baseline = (desc == 'none / none')
         ax.plot(display_bins, smoothed_losses, label=desc, color=('lightgray' if is_baseline else None))
+
+        pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
+        ax.annotate(f"rho = {pcorr:.3f}", (40, smoothed_losses[8]), color='black')
     
     ax.legend()
-    bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
     ax2.hist(display_bins, bins=display_bins, weights=bin_counts, color='#0f0f0f80')
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
@@ -122,7 +127,7 @@ def main():
         plot_val_losses(all_results, arch, ['over / none', 'scale-up / none'], f"val_losses_{arch}_over.png")
         plot_val_losses(all_results, arch, ['none / inv', 'none / inv + lds'], f"val_losses_{arch}_inv.png")
         plot_val_losses(all_results, arch, ['none / sqrt_inv', 'none / sqrt_inv + lds'], f"val_losses_{arch}_sqrt_inv.png")
-
+    
     print("Done")
 
 if __name__ == '__main__':
