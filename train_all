@@ -4,6 +4,8 @@ archs=(
     "resnet18"
     "vgg8"
     "sfcn"
+    "resnet18-20s"
+    "vgg8-20s"
 )
 
 if [[ $# -gt 0 ]]; then
