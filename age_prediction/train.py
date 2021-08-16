@@ -35,7 +35,7 @@ def log(message):
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'resnet18-20s', 'vgg8-20s'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -166,6 +166,11 @@ def setup_model(arch, device):
         model = VGG8(in_channels=130, num_classes=1)
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1)
+    elif arch == 'resnet18-20s':
+        model = models.resnet18(num_classes=1)
+        model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    elif arch == 'vgg8-20s':
+        model = VGG8(in_channels=20, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()

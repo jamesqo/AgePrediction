@@ -11,6 +11,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 configs=(
+    ""
     "--sample over"
     "--sample under"
     "--sample scale-up"
