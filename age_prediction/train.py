@@ -159,10 +159,10 @@ def resample(df, mode, oversamp_limit):
     else:
         raise Exception(f"Invalid sampling mode: {mode}")
 
-    log(f"Number of samples in final training dataset: {df.shape[0]}")
+    log(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
-def setup_model(arch, device):
+def setup_model(arch, device, testing=False):
     if arch == 'resnet18':
         model = models.resnet18(num_classes=1)
         # Set the number of input channels to 130
@@ -172,12 +172,14 @@ def setup_model(arch, device):
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1)
     elif arch == 'resnet18-20s':
-        inner_model = models.resnet18(num_classes=1)
-        inner_model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        model = SlidingWindow(inner_model, in_channels=130, window_size=20)
+        model = models.resnet18(num_classes=1)
+        model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        if testing:
+            model = SlidingWindow(model, in_channels=130, window_size=20)
     elif arch == 'vgg8-20s':
-        inner_model = VGG8(in_channels=20, num_classes=1)
-        model = SlidingWindow(inner_model, in_channels=130, window_size=20)
+        model = VGG8(in_channels=20, num_classes=1)
+        if testing:
+            model = SlidingWindow(model, in_channels=130, window_size=20)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -267,7 +269,8 @@ def main():
             log(val_df['agebin'].value_counts())
         sys.exit(0)
 
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
+    num_slices = 20 if opts.arch in ('resnet18-20s', 'vgg8-20s') else None
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma, num_slices=num_slices)
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
