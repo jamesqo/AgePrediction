@@ -269,8 +269,8 @@ def main():
             log(val_df['agebin'].value_counts())
         sys.exit(0)
 
-    num_slices = 20 if opts.arch in ('resnet18-20s', 'vgg8-20s') else None
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma, num_slices=num_slices)
+    window_size = 20 if opts.arch in ('resnet18-20s', 'vgg8-20s') else None
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma, window_size=window_size)
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)

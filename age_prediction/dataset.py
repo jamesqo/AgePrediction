@@ -6,7 +6,6 @@ from torch.utils import data
 
 from .lds import get_lds_kernel_window
 
-# todo: does this need to be changed too?
 def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     if reweight == 'none':
         return None
@@ -31,24 +30,24 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     return weights
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, labeled=True, num_slices=None):
+    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, labeled=True, window_size=None):
         self.df = df
         self.weights = prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma)
         self.labeled = labeled
-        self.num_slices = num_slices
-        self.samples_per_img = (130 - num_slices + 1) if num_slices else 1
+        self.window_size = window_size
+        self.num_windows = (130 - window_size + 1) if window_size else 1
 
     def __getitem__(self, idx):
-        img_idx = idx // self.samples_per_img
-        chunk_idx = idx % self.samples_per_img
+        img_idx = idx // self.num_windows
+        window_idx = idx % self.num_windows
 
         row = self.df.iloc[img_idx]
         image = nibabel.load(row['path']).get_fdata()
         image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
 
-        if self.num_slices:
-            image = image[chunk_idx:(chunk_idx+self.num_slices), :, :]
+        if self.window_size:
+            image = image[window_idx:(window_idx+self.window_size), :, :]
 
         if self.labeled:
             age = row['age']
@@ -58,4 +57,4 @@ class AgePredictionDataset(data.Dataset):
             return image
 
     def __len__(self):
-        return len(self.df) * self.samples_per_img
+        return len(self.df) * self.num_windows
