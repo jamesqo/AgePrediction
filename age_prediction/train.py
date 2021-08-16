@@ -20,6 +20,7 @@ from torchvision import models
 from .dataset import AgePredictionDataset
 from .sfcn import SFCN
 from .vgg import VGG8
+from .window import SlidingWindow
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 SPLITS_DIR = os.path.join(ROOT_DIR, "folderlist")
@@ -167,10 +168,12 @@ def setup_model(arch, device):
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1)
     elif arch == 'resnet18-20s':
-        model = models.resnet18(num_classes=1)
-        model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        inner_model = models.resnet18(num_classes=1)
+        inner_model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        model = SlidingWindow(inner_model, in_channels=130, window_size=20)
     elif arch == 'vgg8-20s':
-        model = VGG8(in_channels=20, num_classes=1)
+        inner_model = VGG8(in_channels=20, num_classes=1)
+        model = SlidingWindow(inner_model, in_channels=130, window_size=20)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
