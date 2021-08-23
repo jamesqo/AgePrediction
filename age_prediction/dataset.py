@@ -11,6 +11,7 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
         return None
     
     bin_counts = df['agebin'].value_counts()
+    # num_per_label[i] = the number of subjects in the age bin of the ith subject in the dataset
     if reweight == 'inv':
         num_per_label = [bin_counts[bin] for bin in df['agebin']]
     elif reweight == 'sqrt_inv':

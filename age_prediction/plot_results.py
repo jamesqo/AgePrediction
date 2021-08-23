@@ -64,7 +64,7 @@ def plot_losses_over_time(results, fname):
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
 
-def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
+def plot_val_losses(all_results, arch, job_descs, fname):
     def mae(bin, df):
         subjects_in_bin = df[(df['age'] // 5) == bin]
         assert len(subjects_in_bin) > 0
@@ -72,7 +72,8 @@ def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    ax.set_title(f"Validation losses per 5-year age bin ({arch})")
+    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8"}[arch]
+    ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
     ax.set_ylabel("MAE")
     ax.set_ylim(0, 15)
@@ -85,11 +86,10 @@ def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
     df = list(all_results.values())[0]['val_preds']
     bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
 
-    if include_baseline:
-        job_descs += ['none / none']
-    for desc in job_descs:
-        full_desc = f"{arch} / {desc}"
-        df = all_results[full_desc]['val_preds']
+    job_descs.insert(0, ('none / none', "Baseline"))
+    for i, (desc, label) in enumerate(job_descs):
+        key = f"{arch} / {desc}"
+        df = all_results[key]['val_preds']
         losses_per_bin = np.array([mae(bin, df) for bin in bins])
         
         # Smooth losses using a Gaussian kernel
@@ -102,13 +102,17 @@ def plot_val_losses(all_results, arch, job_descs, fname, include_baseline=True):
 
         ax.set_xticks(display_bins)
         is_baseline = (desc == 'none / none')
-        ax.plot(display_bins, smoothed_losses, label=desc, color=('lightgray' if is_baseline else None))
-
+        color = '#888888' if is_baseline else ['red', 'royalblue'][i-1]
+        ax.plot(display_bins, smoothed_losses, label=label, color=color)
+        
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
-        ax.annotate(f"rho = {pcorr:.3f}", (40, smoothed_losses[8]), color='black')
+        anno_x = [15, 30, 45][i]
+        anno_y = smoothed_losses[anno_x//5]-.5
+        ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
     
     ax.legend()
-    ax2.hist(display_bins, bins=display_bins, weights=bin_counts, color='#0f0f0f80')
+    bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
+    ax2.hist(display_bins, bins=display_bins, weights=bin_counts, color='#0f0f0f30')
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
 
@@ -118,16 +122,18 @@ def main():
 
     all_results = load_results()
 
+    plt.rcParams.update({'font.family': 'C059'})
+
     for results in all_results.values():
         job_id = results['config']['job_id']
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
 
     for arch in ('resnet18', 'vgg8'):
-        plot_val_losses(all_results, arch, ['under / none', 'scale-down / none'], f"val_losses_{arch}_under.png")
-        plot_val_losses(all_results, arch, ['over / none', 'scale-up / none'], f"val_losses_{arch}_over.png")
-        plot_val_losses(all_results, arch, ['none / inv', 'none / inv + lds'], f"val_losses_{arch}_inv.png")
-        plot_val_losses(all_results, arch, ['none / sqrt_inv', 'none / sqrt_inv + lds'], f"val_losses_{arch}_sqrt_inv.png")
-    
+        plot_val_losses(all_results, arch, [('under / none', "Undersampling"), ('scale-down / none', "Scaling down")], f"val_losses_{arch}_under.png")
+        plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
+        plot_val_losses(all_results, arch, [('none / inv', "Inverse weighting"), ('none / inv + lds', "Inverse weighting + LDS")], f"val_losses_{arch}_inv.png")
+        plot_val_losses(all_results, arch, [('none / sqrt_inv', "Square root-inverse weighting"), ('none / sqrt_inv + lds', "Square root-inverse weighting + LDS")], f"val_losses_{arch}_sqrt_inv.png")
+
     print("Done")
 
 if __name__ == '__main__':
