@@ -62,6 +62,8 @@ def parse_options():
     parser.add_argument('--lds_ks', type=int, default=9, help='LDS kernel size: should be odd number')
     parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
 
+    parser.add_argument('--from-checkpoint', type=str, help='continue training from an existing checkpoint')
+
     ## For testing purposes only
     parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
     parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
@@ -70,6 +72,7 @@ def parse_options():
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
+    assert (not args.from_checkpoint) or (args.n_epochs < 30), "Must specify --n-epochs alongside --from-checkpoint"
 
     global LOG_FILE
     LOG_FILE = os.path.join(ROOT_DIR, "logs", f"{args.job_id}.log")
@@ -162,7 +165,7 @@ def resample(df, mode, oversamp_limit):
     log(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
-def setup_model(arch, device, testing=False):
+def setup_model(arch, device, testing=False, checkpoint_file=None):
     if arch == 'resnet18':
         model = models.resnet18(num_classes=1)
         # Set the number of input channels to 130
@@ -184,6 +187,11 @@ def setup_model(arch, device, testing=False):
         raise Exception(f"Invalid arch: {arch}")
     model.double()
     model.to(device)
+    
+    if checkpoint_file:
+        checkpoint = torch.load(checkpoint_file, map_location=device)
+        model.load_state_dict(checkpoint)
+
     return model
 
 def train(model, arch, optimizer, train_loader, device):
@@ -288,7 +296,7 @@ def main():
     log("Setting up model")
 
     device = torch.device('cpu' if opts.cpu else 'cuda')
-    model = setup_model(opts.arch, device)
+    model = setup_model(opts.arch, device, testing=False, checkpoint_file=opts.from_checkpoint)
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
 
@@ -312,6 +320,8 @@ def main():
 
             train_losses.append(train_loss)
             val_losses.append(val_loss)
+            torch.save(model.state_dict(), f"{checkpoint_dir}/epoch{epoch}.pth")
+
             if val_loss < best_val_loss:
                 torch.save(model.state_dict(), f"{checkpoint_dir}/best_model.pth")
 
