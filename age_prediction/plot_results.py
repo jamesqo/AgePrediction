@@ -72,7 +72,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8"}[arch]
+    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8", 'sfcn': "SFCN"}[arch]
     ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
     ax.set_ylabel("MAE")
@@ -128,9 +128,10 @@ def main():
         job_id = results['config']['job_id']
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
 
-    for arch in ('resnet18', 'vgg8'):
+    for arch in ('resnet18', 'vgg8', 'sfcn'):
         plot_val_losses(all_results, arch, [('under / none', "Undersampling"), ('scale-down / none', "Scaling down")], f"val_losses_{arch}_under.png")
-        plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
+        if arch != 'sfcn':
+            plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
         plot_val_losses(all_results, arch, [('none / inv', "Inverse weighting"), ('none / inv + lds', "Inverse weighting + LDS")], f"val_losses_{arch}_inv.png")
         plot_val_losses(all_results, arch, [('none / sqrt_inv', "Square root-inverse weighting"), ('none / sqrt_inv + lds', "Square root-inverse weighting + LDS")], f"val_losses_{arch}_sqrt_inv.png")
 
