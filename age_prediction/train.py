@@ -26,6 +26,10 @@ START_TIME = datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
 LOG_FILE = ''
 
 def log(message):
+    if LOG_FILE == '':
+        print(message)
+        return
+
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
     with open(LOG_FILE, 'a+') as log_file:
