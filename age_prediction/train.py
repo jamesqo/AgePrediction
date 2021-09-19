@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import random
+import re
 import sys
 
 import numpy as np
@@ -68,6 +69,7 @@ def parse_options():
     parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
     parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
     parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
+    parser.add_argument('--save-df', action='store_true', help='save full dataframe to results dir and exit')
     parser.add_argument('--print-bin-counts', action='store_true', help='print age bin counts and exit')
 
     args = parser.parse_args()
@@ -91,6 +93,10 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         path = path.replace('/ABIDE/', '/ABIDE_I/')
         path = path.replace('/NIH-PD/', '/NIH_PD/')
         return path
+    
+    def extract_dataset(path):
+        name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
+        return 'MGHBCH' if name in ('MGH', 'BCH') else name
 
     schema = {'id': str, 'age': float, 'sex': str, 'path': str}
     dfs = []
@@ -101,6 +107,7 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         df['path'] = df['path'].apply(correct_path)
         df['agebin'] = df['age'] // bin_width
         df['split'] = split_num
+        df['dataset'] = df['path'].apply(extract_dataset)
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
@@ -265,7 +272,13 @@ def main():
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
+    if opts.save_df:
+        opts.min_bin_count = None
     df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
+    if opts.save_df:
+        df.to_csv(os.path.join(results_dir, "merged_df.csv"), index=False)
+        sys.exit(0)
+
     _train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
     train_df = resample(_train_df, mode=opts.sample, oversamp_limit=opts.oversamp_limit)
 
