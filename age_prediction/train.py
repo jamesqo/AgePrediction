@@ -21,7 +21,6 @@ from torchvision import models
 from .dataset import AgePredictionDataset
 from .sfcn import SFCN
 from .vgg import VGG8
-from .window import SlidingWindow
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 SPLITS_DIR = os.path.join(ROOT_DIR, "folderlist")
@@ -41,7 +40,7 @@ def log(message):
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'resnet18-20s', 'vgg8-20s'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -181,15 +180,6 @@ def setup_model(arch, device, testing=False, checkpoint_file=None):
         model = VGG8(in_channels=130, num_classes=1)
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1)
-    elif arch == 'resnet18-20s':
-        model = models.resnet18(num_classes=1)
-        model.conv1 = nn.Conv2d(20, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        if testing:
-            model = SlidingWindow(model, in_channels=130, window_size=20)
-    elif arch == 'vgg8-20s':
-        model = VGG8(in_channels=20, num_classes=1)
-        if testing:
-            model = SlidingWindow(model, in_channels=130, window_size=20)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -290,8 +280,7 @@ def main():
             log(val_df['agebin'].value_counts())
         sys.exit(0)
 
-    window_size = 20 if opts.arch in ('resnet18-20s', 'vgg8-20s') else None
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma, window_size=window_size)
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
