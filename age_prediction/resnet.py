@@ -36,8 +36,7 @@ class BasicBlock(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, fds, bucket_num, bucket_start, start_update, start_smooth,
-                 kernel, ks, sigma, momentum):
+    def __init__(self, block, layers, fds):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -52,12 +51,11 @@ class ResNet(nn.Module):
         self.linear = nn.Linear(512 * block.expansion, 1)
 
         if fds:
-            self.FDS = FDS(
-                feature_dim=512 * block.expansion, bucket_num=bucket_num, bucket_start=bucket_start,
-                start_update=start_update, start_smooth=start_smooth, kernel=kernel, ks=ks, sigma=sigma, momentum=momentum
+            self.fds = FDS(
+                feature_dim=512 * block.expansion, bucket_num=fds['bucket_num'], bucket_start=fds['bucket_start'],
+                start_update=fds['start_update'], start_smooth=fds['start_smooth'], kernel=fds['kernel'], ks=fds['ks'], sigma=fds['sigma'], momentum=fds['momentum']
             )
-        self.fds = fds
-        self.start_smooth = start_smooth
+        self.start_smooth = fds['start_smooth']
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -99,7 +97,7 @@ class ResNet(nn.Module):
 
         if self.training and self.fds:
             if epoch >= self.start_smooth:
-                encoding_s = self.FDS.smooth(encoding_s, targets, epoch)
+                encoding_s = self.fds.smooth(encoding_s, targets, epoch)
 
         x = self.linear(encoding_s)
 
