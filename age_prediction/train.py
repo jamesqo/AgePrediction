@@ -215,6 +215,10 @@ def train(model, arch, optimizer, train_loader, device):
         losses.append(loss.item())
         if batch_idx % 10 == 0:
             log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
+        
+        if fds:
+            fds.update_last_epoch_stats(epoch)
+            fds.update_running_stats(training_features, training_labels, epoch)
     
     return np.mean(losses)
 
