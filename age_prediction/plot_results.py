@@ -131,44 +131,56 @@ def main():
 
     plt.rcParams.update({'font.family': 'C059'})
 
+    ## Plot losses over time
     for results in all_results.values():
         job_id = results['config']['job_id']
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
     
+    ## Plot validation losses per bin
     for arch in ('resnet18', 'vgg8', 'sfcn'):
         plot_val_losses(all_results, arch, [('under / none', "Undersampling"), ('scale-down / none', "Scaling down")], f"val_losses_{arch}_under.png")
         plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
         plot_val_losses(all_results, arch, [('none / inv', "Inverse weighting"), ('none / inv + lds', "Inverse weighting + LDS")], f"val_losses_{arch}_inv.png")
         plot_val_losses(all_results, arch, [('none / sqrt_inv', "Square root-inverse weighting"), ('none / sqrt_inv + lds', "Square root-inverse weighting + LDS")], f"val_losses_{arch}_sqrt_inv.png")
     
-    for mode in ('none',):
-        path = os.path.join(RESULTS_DIR, f"sample-{mode}", "merged_df.csv")
-        df = pd.read_csv(path)
-        
-        #print(df['dataset'].value_counts())
-        plt.hist(df['dataset'], bins=np.arange(len(set(df['dataset'])))-0.5)
-        plt.title("Number of samples contributed by each dataset")
-        plt.xlabel("Dataset name")
+    ## Plot histograms for each dataset + the combined dataset
+    path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")
+    df = pd.read_csv(path)
+    
+    label_locs = np.arange(len(set(df['dataset']))) - 0.5
+    plt.hist(df['dataset'], bins=label_locs)
+    plt.title("Number of samples contributed by each dataset")
+    plt.xlabel("Dataset name")
+    plt.ylabel("Number of samples")
+    plt.savefig(os.path.join(FIGURES_DIR, 'dataset_counts.png'))
+    plt.clf()
+
+    dataset_names = sorted(set(df['dataset']))
+    dataset_names += ['combined']
+    for dataset in dataset_names:
+        subdf = df if dataset == 'combined' else df[df['dataset'] == dataset]
+        bins = np.arange(18)
+        display_bins = [5*bin for bin in bins]
+        display_dataset = {
+            'ABIDE_I': 'ABIDE-I',
+            'beijingEn': 'BeijingEN',
+            'BGSP': 'BGSP',
+            'DLBS': 'DLBS',
+            'IXI_600': 'IXI',
+            'MGHBCH': 'MGHBCH',
+            'NIH_PD': 'NIH-PD',
+            'OASIS_3': 'OASIS-3',
+            'combined': 'Combined'
+        }[dataset]
+        bin_counts = [sum((subdf['age'] // 5) == bin) for bin in bins]
+
+        plt.hist(display_bins, bins=display_bins, weights=bin_counts)
+        plt.xticks(display_bins)
+        plt.title(display_dataset)
+        plt.xlabel("Age")
         plt.ylabel("Number of samples")
-        plt.savefig(os.path.join(FIGURES_DIR, 'dataset_counts.png'))
+        plt.savefig(os.path.join(FIGURES_DIR, f"bin_counts_{dataset}.png"))
         plt.clf()
-
-        for dataset in sorted(set(df['dataset'])) + ['Combined']:
-            if dataset == 'Combined':
-                subdf = df
-            else:
-                subdf = df[df['dataset'] == dataset]
-            bins = np.arange(18)
-            display_bins = [5*bin for bin in bins]
-            bin_counts = [sum((subdf['age'] // 5) == bin) for bin in bins]
-            plt.hist(display_bins, bins=display_bins, weights=bin_counts)
-
-            plt.xticks(display_bins)
-            plt.title(dataset) # todo: change to a user-friendly name
-            plt.xlabel("Age")
-            plt.ylabel("Number of samples")
-            plt.savefig(os.path.join(FIGURES_DIR, f"bin_counts_{dataset}.png"))
-            plt.clf()
 
     print("Done")
 
