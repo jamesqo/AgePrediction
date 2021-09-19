@@ -7,7 +7,7 @@ from torch.utils import data
 from .dataset import AgePredictionDataset
 from .train import setup_model
 
-def evaluate(model, dataloader, device):
+def evaluate(model, arch, dataloader, device):
     model.eval()
 
     all_preds = []
@@ -18,6 +18,8 @@ def evaluate(model, dataloader, device):
             if not torch.is_tensor(images):
                 images = torch.tensor(images).unsqueeze(0)
             images = images.to(device)
+            if arch == 'sfcn':
+                images = images.unsqueeze(1)
             age_preds = model(images).view(-1)
 
             all_preds.extend(age_preds)
@@ -39,12 +41,12 @@ def predict_ages(filenames,
     if not os.path.isfile(model_path):
         raise Exception(f"{model_path} doesn't exist")
     checkpoint = torch.load(model_path, map_location=device)
-    model = setup_model(architecture, device)
+    model = setup_model(architecture, device, testing=True)
     model.load_state_dict(checkpoint)
 
     df = pd.DataFrame({'path': filenames})
     dataset = AgePredictionDataset(df, labeled=False)
     dataloader = data.DataLoader(dataset)
-    age_preds = evaluate(model, dataloader, device)
+    age_preds = evaluate(model, architecture, dataloader, device)
 
     return pd.DataFrame({'path': filenames, 'age_pred': age_preds})

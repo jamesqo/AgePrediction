@@ -40,6 +40,7 @@ class AgePredictionDataset(data.Dataset):
         image = nibabel.load(row['path']).get_fdata()
         image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
+
         if self.labeled:
             age = row['age']
             weight = self.weights[idx] if self.weights is not None else 1.

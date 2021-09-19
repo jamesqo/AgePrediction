@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import random
+import re
 import sys
 
 import numpy as np
@@ -18,6 +19,7 @@ from torch.utils import data
 from torchvision import models
 
 from .dataset import AgePredictionDataset
+from .sfcn import SFCN
 from .vgg import VGG8
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -38,7 +40,7 @@ def log(message):
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -60,14 +62,18 @@ def parse_options():
     parser.add_argument('--lds_ks', type=int, default=9, help='LDS kernel size: should be odd number')
     parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
 
+    parser.add_argument('--from-checkpoint', type=str, help='continue training from an existing checkpoint')
+
     ## For testing purposes only
     parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
     parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
     parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
+    parser.add_argument('--save-df', action='store_true', help='save full dataframe to results dir and exit')
     parser.add_argument('--print-bin-counts', action='store_true', help='print age bin counts and exit')
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
+    assert (not args.from_checkpoint) or (args.n_epochs < 30), "Must specify --n-epochs alongside --from-checkpoint"
 
     global LOG_FILE
     LOG_FILE = os.path.join(ROOT_DIR, "logs", f"{args.job_id}.log")
@@ -86,6 +92,10 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         path = path.replace('/ABIDE/', '/ABIDE_I/')
         path = path.replace('/NIH-PD/', '/NIH_PD/')
         return path
+    
+    def extract_dataset(path):
+        name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
+        return 'MGHBCH' if name in ('MGH', 'BCH') else name
 
     schema = {'id': str, 'age': float, 'sex': str, 'path': str}
     dfs = []
@@ -96,6 +106,7 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         df['path'] = df['path'].apply(correct_path)
         df['agebin'] = df['age'] // bin_width
         df['split'] = split_num
+        df['dataset'] = df['path'].apply(extract_dataset)
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
@@ -157,23 +168,30 @@ def resample(df, mode, oversamp_limit):
     else:
         raise Exception(f"Invalid sampling mode: {mode}")
 
-    log(f"Number of samples in final training dataset: {df.shape[0]}")
+    log(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
-def setup_model(arch, device):
+def setup_model(arch, device, testing=False, checkpoint_file=None):
     if arch == 'resnet18':
         model = models.resnet18(num_classes=1)
         # Set the number of input channels to 130
         model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
     elif arch == 'vgg8':
         model = VGG8(in_channels=130, num_classes=1)
+    elif arch == 'sfcn':
+        model = SFCN(in_channels=1, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
     model.to(device)
+    
+    if checkpoint_file:
+        checkpoint = torch.load(checkpoint_file, map_location=device)
+        model.load_state_dict(checkpoint)
+
     return model
 
-def train(model, optimizer, train_loader, device):
+def train(model, arch, optimizer, train_loader, device):
     def weighted_l1_loss(inputs, targets, weights):
         loss = F.l1_loss(inputs, targets, reduction='none')
         loss *= weights.expand_as(loss)
@@ -187,6 +205,8 @@ def train(model, optimizer, train_loader, device):
     for batch_idx, (images, ages, weights) in enumerate(train_loader):
         images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         optimizer.zero_grad()
+        if arch == 'sfcn':
+            images = images.unsqueeze(1)
         age_preds = model(images).view(-1)
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
@@ -198,7 +218,7 @@ def train(model, optimizer, train_loader, device):
     
     return np.mean(losses)
 
-def validate(model, val_loader, device):
+def validate(model, arch, val_loader, device):
     model.eval()
 
     losses = []
@@ -212,6 +232,8 @@ def validate(model, val_loader, device):
             if not torch.is_tensor(ages):
                 ages = torch.tensor(ages).unsqueeze(0)
             images, ages = images.to(device), ages.to(device)
+            if arch == 'sfcn':
+                images = images.unsqueeze(1)
             age_preds = model(images).view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
@@ -240,7 +262,13 @@ def main():
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
+    if opts.save_df:
+        opts.min_bin_count = None
     df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
+    if opts.save_df:
+        df.to_csv(os.path.join(results_dir, "merged_df.csv"), index=False)
+        sys.exit(0)
+
     _train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
     train_df = resample(_train_df, mode=opts.sample, oversamp_limit=opts.oversamp_limit)
 
@@ -270,7 +298,7 @@ def main():
     log("Setting up model")
 
     device = torch.device('cpu' if opts.cpu else 'cuda')
-    model = setup_model(opts.arch, device)
+    model = setup_model(opts.arch, device, testing=False, checkpoint_file=opts.from_checkpoint)
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
 
@@ -286,14 +314,16 @@ def main():
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")
-            train_loss = train(model, optimizer, train_loader, device)
+            train_loss = train(model, opts.arch, optimizer, train_loader, device)
             log(f"Mean training loss: {train_loss}")
-            val_loss, _ = validate(model, val_loader, device)
+            val_loss, _ = validate(model, opts.arch, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
             train_losses.append(train_loss)
             val_losses.append(val_loss)
+            torch.save(model.state_dict(), f"{checkpoint_dir}/epoch{epoch}.pth")
+
             if val_loss < best_val_loss:
                 torch.save(model.state_dict(), f"{checkpoint_dir}/best_model.pth")
 
@@ -307,7 +337,7 @@ def main():
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth", map_location=device)
     model.load_state_dict(checkpoint)
     
-    _, best_val_preds = validate(model, val_dataset, device)
+    _, best_val_preds = validate(model, opts.arch, val_dataset, device)
     
     ## Save results so we can plot them later
 

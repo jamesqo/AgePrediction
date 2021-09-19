@@ -72,7 +72,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8"}[arch]
+    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8", 'sfcn': "SFCN"}[arch]
     ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
     ax.set_ylabel("MAE")
@@ -90,6 +90,10 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     for i, (desc, label) in enumerate(job_descs):
         key = f"{arch} / {desc}"
         df = all_results[key]['val_preds']
+
+        overall_mae = np.mean(np.abs(df['age'] - df['age_pred']))
+        print(f"Overall MAE for {key}: {overall_mae:.3f}")
+
         losses_per_bin = np.array([mae(bin, df) for bin in bins])
         
         # Smooth losses using a Gaussian kernel
@@ -106,9 +110,12 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         ax.plot(display_bins, smoothed_losses, label=label, color=color)
         
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
+        print(f"ρ for {key}: {pcorr:.3f}")
         anno_x = [15, 30, 45][i]
         anno_y = smoothed_losses[anno_x//5]-.5
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
+
+        print()
     
     ax.legend()
     bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
@@ -124,15 +131,56 @@ def main():
 
     plt.rcParams.update({'font.family': 'C059'})
 
+    ## Plot losses over time
     for results in all_results.values():
         job_id = results['config']['job_id']
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
-
-    for arch in ('resnet18', 'vgg8'):
+    
+    ## Plot validation losses per bin
+    for arch in ('resnet18', 'vgg8', 'sfcn'):
         plot_val_losses(all_results, arch, [('under / none', "Undersampling"), ('scale-down / none', "Scaling down")], f"val_losses_{arch}_under.png")
         plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
         plot_val_losses(all_results, arch, [('none / inv', "Inverse weighting"), ('none / inv + lds', "Inverse weighting + LDS")], f"val_losses_{arch}_inv.png")
         plot_val_losses(all_results, arch, [('none / sqrt_inv', "Square root-inverse weighting"), ('none / sqrt_inv + lds', "Square root-inverse weighting + LDS")], f"val_losses_{arch}_sqrt_inv.png")
+    
+    ## Plot histograms for each dataset + the combined dataset
+    path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")
+    df = pd.read_csv(path)
+    
+    label_locs = np.arange(len(set(df['dataset']))) - 0.5
+    plt.hist(df['dataset'], bins=label_locs)
+    plt.title("Number of samples contributed by each dataset")
+    plt.xlabel("Dataset name")
+    plt.ylabel("Number of samples")
+    plt.savefig(os.path.join(FIGURES_DIR, 'dataset_counts.png'))
+    plt.clf()
+
+    dataset_names = sorted(set(df['dataset']))
+    dataset_names += ['combined']
+    for dataset in dataset_names:
+        subdf = df if dataset == 'combined' else df[df['dataset'] == dataset]
+        bins = np.arange(18)
+        display_bins = [5*bin for bin in bins]
+        display_dataset = {
+            'ABIDE_I': 'ABIDE-I',
+            'beijingEn': 'BeijingEN',
+            'BGSP': 'BGSP',
+            'DLBS': 'DLBS',
+            'IXI_600': 'IXI',
+            'MGHBCH': 'MGHBCH',
+            'NIH_PD': 'NIH-PD',
+            'OASIS_3': 'OASIS-3',
+            'combined': 'Combined'
+        }[dataset]
+        bin_counts = [sum((subdf['age'] // 5) == bin) for bin in bins]
+
+        plt.hist(display_bins, bins=display_bins, weights=bin_counts)
+        plt.xticks(display_bins)
+        plt.title(display_dataset)
+        plt.xlabel("Age")
+        plt.ylabel("Number of samples")
+        plt.savefig(os.path.join(FIGURES_DIR, f"bin_counts_{dataset}.png"))
+        plt.clf()
 
     print("Done")
 
