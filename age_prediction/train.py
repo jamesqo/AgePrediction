@@ -16,9 +16,9 @@ import torch.nn.functional as F
 from torch import optim
 from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
-from torchvision import models
 
 from .dataset import AgePredictionDataset
+from .resnet import resnet18
 from .sfcn import SFCN
 from .vgg import VGG8
 
@@ -61,6 +61,16 @@ def parse_options():
                         choices=['gaussian', 'triang', 'laplace'], help='LDS kernel type')
     parser.add_argument('--lds_ks', type=int, default=9, help='LDS kernel size: should be odd number')
     parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
+
+    parser.add_argument('--fds', action='store_true', default=False, help='whether to enable FDS')
+    parser.add_argument('--fds_kernel', type=str, default='gaussian', choices=['gaussian', 'triang', 'laplace'], help='FDS kernel type')
+    parser.add_argument('--fds_ks', type=int, default=9, help='FDS kernel size: should be odd number')
+    parser.add_argument('--fds_sigma', type=float, default=1, help='FDS gaussian/laplace kernel sigma')
+    parser.add_argument('--start_update', type=int, default=0, help='which epoch to start FDS updating')
+    parser.add_argument('--start_smooth', type=int, default=1, help='which epoch to start using FDS to smooth features')
+    parser.add_argument('--bucket_num', type=int, default=100, help='maximum bucket considered for FDS')
+    parser.add_argument('--bucket_start', type=int, default=0, help='minimum (starting) bucket for FDS')
+    parser.add_argument('--fds_momentum', type=float, default=0.9, help='FDS momentum')
 
     parser.add_argument('--from-checkpoint', type=str, help='continue training from an existing checkpoint')
 
@@ -171,15 +181,15 @@ def resample(df, mode, oversamp_limit):
     log(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
-def setup_model(arch, device, testing=False, checkpoint_file=None):
+def setup_model(arch, device, testing=False, checkpoint_file=None, fds=None):
     if arch == 'resnet18':
-        model = models.resnet18(num_classes=1)
+        model = resnet18(fds=fds)
         # Set the number of input channels to 130
         model.conv1 = nn.Conv2d(130, 64, kernel_size=7, stride=2, padding=3, bias=False)
     elif arch == 'vgg8':
-        model = VGG8(in_channels=130, num_classes=1)
+        model = VGG8(in_channels=130, num_classes=1, fds=fds)
     elif arch == 'sfcn':
-        model = SFCN(in_channels=1, num_classes=1)
+        model = SFCN(in_channels=1, num_classes=1, fds=fds)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -191,7 +201,7 @@ def setup_model(arch, device, testing=False, checkpoint_file=None):
 
     return model
 
-def train(model, arch, optimizer, train_loader, device):
+def train(model, arch, optimizer, train_loader, device, epoch):
     def weighted_l1_loss(inputs, targets, weights):
         loss = F.l1_loss(inputs, targets, reduction='none')
         loss *= weights.expand_as(loss)
@@ -202,12 +212,21 @@ def train(model, arch, optimizer, train_loader, device):
 
     losses = []
 
+    encodings = []
+    targets = []
+
     for batch_idx, (images, ages, weights) in enumerate(train_loader):
         images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         optimizer.zero_grad()
         if arch == 'sfcn':
             images = images.unsqueeze(1)
-        age_preds = model(images).view(-1)
+        if model.fds:
+            age_preds, batch_encodings = model(images, targets=ages, epoch=epoch)
+            encodings.extend(batch_encodings.squeeze().cpu().numpy())
+            targets.extend(ages.squeeze().cpu().numpy())
+        else:
+            age_preds = model(images)
+        age_preds = age_preds.view(-1)
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
         optimizer.step()
@@ -215,6 +234,10 @@ def train(model, arch, optimizer, train_loader, device):
         losses.append(loss.item())
         if batch_idx % 10 == 0:
             log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
+        
+        if model.fds:
+            model.fds.update_last_epoch_stats(epoch)
+            model.fds.update_running_stats(encodings, targets, epoch)
     
     return np.mean(losses)
 
@@ -298,7 +321,19 @@ def main():
     log("Setting up model")
 
     device = torch.device('cpu' if opts.cpu else 'cuda')
-    model = setup_model(opts.arch, device, testing=False, checkpoint_file=opts.from_checkpoint)
+    fds = None
+    if opts.fds:
+        fds = {
+            'bucket_num': opts.bucket_num,
+            'bucket_start': opts.bucket_start,
+            'start_update': opts.start_update,
+            'start_smooth': opts.start_smooth,
+            'kernel': opts.fds_kernel,
+            'ks': opts.fds_ks,
+            'sigma': opts.fds_sigma,
+            'momentum': opts.fds_momentum
+        }
+    model = setup_model(opts.arch, device, testing=False, checkpoint_file=opts.from_checkpoint, fds=fds)
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
 
@@ -314,7 +349,7 @@ def main():
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")
-            train_loss = train(model, opts.arch, optimizer, train_loader, device)
+            train_loss = train(model, opts.arch, optimizer, train_loader, device, epoch)
             log(f"Mean training loss: {train_loss}")
             val_loss, _ = validate(model, opts.arch, val_loader, device)
             log(f"Mean validation loss: {val_loss}")
