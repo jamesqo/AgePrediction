@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal.windows import triang
+import torch
 
 def get_lds_kernel_window(kernel, ks, sigma):
     assert kernel in ['gaussian', 'triang', 'laplace']

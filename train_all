@@ -4,8 +4,6 @@ archs=(
     "resnet18"
     "vgg8"
     "sfcn"
-    "resnet18-20s"
-    "vgg8-20s"
 )
 
 if [[ $# -gt 0 ]]; then
@@ -13,15 +11,20 @@ if [[ $# -gt 0 ]]; then
 fi
 
 configs=(
-    ""
-    "--sample over"
-    "--sample under"
-    "--sample scale-up"
-    "--sample scale-down"
-    "--reweight inv"
-    "--reweight sqrt_inv"
-    "--reweight inv --lds"
-    "--reweight sqrt_inv --lds"
+    #""
+    #"--sample over"
+    #"--sample under"
+    #"--sample scale-up"
+    #"--sample scale-down"
+    #"--reweight inv"
+    #"--reweight sqrt_inv"
+    #"--reweight inv --lds"
+    #"--reweight sqrt_inv --lds"
+    #"--fds"
+    "--reweight inv --fds"
+    "--reweight sqrt_inv --fds"
+    "--reweight inv --lds --fds"
+    "--reweight sqrt_inv --lds --fds"
 )
 
 for arch in "${archs[@]}"; do

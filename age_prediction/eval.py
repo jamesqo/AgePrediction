@@ -41,7 +41,7 @@ def predict_ages(filenames,
     if not os.path.isfile(model_path):
         raise Exception(f"{model_path} doesn't exist")
     checkpoint = torch.load(model_path, map_location=device)
-    model = setup_model(architecture, device, testing=True)
+    model = setup_model(architecture, device)
     model.load_state_dict(checkpoint)
 
     df = pd.DataFrame({'path': filenames})
