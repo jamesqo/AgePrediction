@@ -68,7 +68,7 @@ def parse_options():
     parser.add_argument('--fds_sigma', type=float, default=1, help='FDS gaussian/laplace kernel sigma')
     parser.add_argument('--start_update', type=int, default=0, help='which epoch to start FDS updating')
     parser.add_argument('--start_smooth', type=int, default=1, help='which epoch to start using FDS to smooth features')
-    parser.add_argument('--bucket_num', type=int, default=100, help='maximum bucket considered for FDS')
+    parser.add_argument('--bucket_num', type=int, default=20, help='maximum bucket considered for FDS')
     parser.add_argument('--bucket_start', type=int, default=0, help='minimum (starting) bucket for FDS')
     parser.add_argument('--fds_momentum', type=float, default=0.9, help='FDS momentum')
 
@@ -80,6 +80,7 @@ def parse_options():
     parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
     parser.add_argument('--save-df', action='store_true', help='save full dataframe to results dir and exit')
     parser.add_argument('--print-bin-counts', action='store_true', help='print age bin counts and exit')
+    parser.add_argument('--val-size', type=float, default=0.2, help='size of validation set used for training')
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
@@ -120,14 +121,14 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
+    
+    if max_samples is not None:
+        combined_df = combined_df.sample(max_samples)
 
     if min_bin_count is not None:
         bin_counts = combined_df['agebin'].value_counts()
         bins_below_cutoff = [bin for bin in bin_counts.keys() if bin_counts[bin] < min_bin_count]
         combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
-    
-    if max_samples is not None:
-        combined_df = combined_df.sample(max_samples)
     
     return combined_df
 
@@ -181,7 +182,7 @@ def resample(df, mode, oversamp_limit):
     log(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
-def setup_model(arch, device, testing=False, checkpoint_file=None, fds=None):
+def setup_model(arch, device, checkpoint_file=None, fds=None):
     if arch == 'resnet18':
         model = resnet18(fds=fds)
         # Set the number of input channels to 130
@@ -222,8 +223,8 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             images = images.unsqueeze(1)
         if model.fds:
             age_preds, batch_encodings = model(images, targets=ages, epoch=epoch)
-            encodings.extend(batch_encodings.squeeze().cpu().numpy())
-            targets.extend(ages.squeeze().cpu().numpy())
+            encodings.extend(batch_encodings.detach().cpu().numpy())
+            targets.extend(ages.cpu().numpy())
         else:
             age_preds = model(images)
         age_preds = age_preds.view(-1)
@@ -235,9 +236,10 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         if batch_idx % 10 == 0:
             log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
         
-        if model.fds:
-            model.fds.update_last_epoch_stats(epoch)
-            model.fds.update_running_stats(encodings, targets, epoch)
+    if model.fds:
+        encodings, targets = torch.from_numpy(np.vstack(encodings)).cuda(), torch.from_numpy(np.hstack(targets)).cuda()
+        model.fds.update_last_epoch_stats(epoch)
+        model.fds.update_running_stats(encodings, targets, epoch)
     
     return np.mean(losses)
 
@@ -292,7 +294,7 @@ def main():
         df.to_csv(os.path.join(results_dir, "merged_df.csv"), index=False)
         sys.exit(0)
 
-    _train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['agebin'])
+    _train_df, val_df = train_test_split(df, test_size=opts.val_size, stratify=df['agebin'])
     train_df = resample(_train_df, mode=opts.sample, oversamp_limit=opts.oversamp_limit)
 
     if opts.print_bin_counts:
@@ -333,7 +335,7 @@ def main():
             'sigma': opts.fds_sigma,
             'momentum': opts.fds_momentum
         }
-    model = setup_model(opts.arch, device, testing=False, checkpoint_file=opts.from_checkpoint, fds=fds)
+    model = setup_model(opts.arch, device, checkpoint_file=opts.from_checkpoint, fds=fds)
     optimizer = optim.Adam(model.parameters(), lr=opts.initial_lr, weight_decay=opts.weight_decay)
     scheduler = StepLR(optimizer, step_size=opts.step_size, gamma=opts.gamma)
 
