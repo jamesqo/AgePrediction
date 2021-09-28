@@ -17,11 +17,20 @@ def has_results(job_id):
            os.path.isfile(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv") and \
            os.path.isfile(f"{RESULTS_DIR}/{job_id}/config.json")
 
-def describe_job(**cfg):
-    desc = f"{cfg['arch']} / {cfg['sample']} / {cfg['reweight']}"
-    if cfg['lds']:
-        desc += " + lds"
-    return desc
+def describe_strat(cfg):
+    if cfg['sample'] != 'none':
+        return cfg['sample']
+    elif cfg['reweight'] != 'none':
+        desc = cfg['reweight']
+        if cfg['lds']:
+            desc += " + lds"
+        if cfg['fds']:
+            desc += " + fds"
+        return desc
+    return 'baseline'
+
+def describe_job(cfg):
+    return describe_strat(cfg) + f" ({cfg['arch']})"
 
 def load_results():
     job_ids = os.listdir(RESULTS_DIR)
@@ -35,7 +44,7 @@ def load_results():
         with open(f"{RESULTS_DIR}/{job_id}/config.json") as f:
             cfg = json.load(f)
         
-        job_desc = describe_job(**cfg)
+        job_desc = describe_job(cfg)
         results = {}
         results['train_losses'] = train_losses
         results['val_losses'] = val_losses
@@ -51,7 +60,7 @@ def plot_losses_over_time(results, fname):
     cfg = results['config']
     n_epochs = len(train_losses)
     
-    title = describe_job(**cfg)
+    title = describe_job(cfg)
 
     fig, ax = plt.subplots()
     ax.set_title(title)
@@ -86,9 +95,9 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     df = list(all_results.values())[0]['val_preds']
     bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
 
-    job_descs.insert(0, ('none / none', "Baseline"))
-    for i, (desc, label) in enumerate(job_descs):
-        key = f"{arch} / {desc}"
+    job_descs.insert(0, ('baseline', "Baseline", '#888888', ''))
+    for i, (desc, label, color, style) in enumerate(job_descs):
+        key = f"{desc} ({arch})"
         df = all_results[key]['val_preds']
 
         overall_mae = np.mean(np.abs(df['age'] - df['age_pred']))
@@ -105,9 +114,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
             smoothed_losses[bin] = sum(losses_per_bin * kernel)
 
         ax.set_xticks(display_bins)
-        is_baseline = (desc == 'none / none')
-        color = '#888888' if is_baseline else ['red', 'royalblue'][i-1]
-        ax.plot(display_bins, smoothed_losses, label=label, color=color)
+        ax.plot(display_bins, smoothed_losses, label=label, color=color, linestyle=style)
         
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
         print(f"ρ for {key}: {pcorr:.3f}")
@@ -138,10 +145,30 @@ def main():
     
     ## Plot validation losses per bin
     for arch in ('resnet18', 'vgg8', 'sfcn'):
-        plot_val_losses(all_results, arch, [('under / none', "Undersampling"), ('scale-down / none', "Scaling down")], f"val_losses_{arch}_under.png")
-        plot_val_losses(all_results, arch, [('over / none', "Oversampling"), ('scale-up / none', "Scaling up")], f"val_losses_{arch}_over.png")
-        plot_val_losses(all_results, arch, [('none / inv', "Inverse weighting"), ('none / inv + lds', "Inverse weighting + LDS")], f"val_losses_{arch}_inv.png")
-        plot_val_losses(all_results, arch, [('none / sqrt_inv', "Square root-inverse weighting"), ('none / sqrt_inv + lds', "Square root-inverse weighting + LDS")], f"val_losses_{arch}_sqrt_inv.png")
+        plot_val_losses(all_results, arch,
+            [
+                ('under', "Undersampling", 'red', '')
+                ('scale-down', "Scaling down", 'red', '--'),
+                ('over', "Oversampling", 'royalblue', ''),
+                ('scale-up', "Scaling up", 'royalblue', '--')
+            ],
+            f"val_losses_{arch}_resampling.png")
+        plot_val_losses(all_results, arch,
+            [
+                ('inv', "Inverse weighting", 'red', ''),
+                ('inv + lds', "Inverse weighting + LDS", 'royalblue', ''),
+                ('inv + fds', "Inverse weighting + FDS", 'yellow', ''),
+                ('inv + lds + fds', "Inverse weighting + LDS + FDS", 'green', '')
+            ],
+            f"val_losses_{arch}_reweighting_inv.png")
+        plot_val_losses(all_results, arch,
+            [
+                ('sqrt_inv', "Square-root inverse weighting", 'red', ''),
+                ('sqrt_inv + lds', "Square-root inverse weighting + LDS", 'royalblue', ''),
+                ('sqrt_inv + fds', "Square-root inverse weighting + FDS", 'yellow', ''),
+                ('sqrt_inv + lds + fds', "Square-root inverse weighting + LDS + FDS", 'green', '')
+            ],
+            f"val_losses_{arch}_reweighting_inv.png")
     
     ## Plot histograms for each dataset + the combined dataset
     path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")
