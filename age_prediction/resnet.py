@@ -49,6 +49,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.linear = nn.Linear(512 * block.expansion, 1)
 
+        self.uses_fds = fds
         if fds:
             self.fds = FDS(
                 feature_dim=512 * block.expansion, bucket_num=fds['bucket_num'], bucket_start=fds['bucket_start'],
@@ -94,13 +95,13 @@ class ResNet(nn.Module):
 
         encoding_s = encoding
 
-        if self.training and self.fds:
+        if self.training and self.uses_fds:
             if epoch >= self.start_smooth:
                 encoding_s = self.fds.smooth(encoding_s, targets, epoch)
 
         x = self.linear(encoding_s)
 
-        if self.training and self.fds:
+        if self.training and self.uses_fds:
             return x, encoding
         else:
             return x

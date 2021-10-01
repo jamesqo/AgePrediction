@@ -46,6 +46,7 @@ class VGG8(nn.Module):
 
         self.classifier = nn.Linear(cfg[-1], num_classes)
 
+        self.uses_fds = fds
         if fds:
             self.fds = FDS(
                 feature_dim=cfg[-1],
@@ -81,12 +82,12 @@ class VGG8(nn.Module):
         encoding = torch.flatten(self.avg(x), 1)
 
         encoding_s = encoding
-        if self.training and self.fds:
+        if self.training and self.uses_fds:
             if epoch >= self.start_smooth:
                 encoding_s = self.fds.smooth(encoding_s, targets, epoch)
         x = self.classifier(encoding_s)
 
-        if self.training and self.fds:
+        if self.training and self.uses_fds:
             return x, encoding
         else:
             return x

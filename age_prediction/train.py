@@ -225,7 +225,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         optimizer.zero_grad()
         if arch == 'sfcn':
             images = images.unsqueeze(1)
-        if model.fds:
+        if model.uses_fds:
             age_preds, batch_encodings = model(images, targets=ages, epoch=epoch)
             encodings.extend(batch_encodings.detach().cpu().numpy())
             targets.extend(ages.cpu().numpy())
@@ -240,7 +240,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         if batch_idx % 10 == 0:
             log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
         
-    if model.fds:
+    if model.uses_fds:
         encodings, targets = torch.from_numpy(np.vstack(encodings)).cuda(), torch.from_numpy(np.hstack(targets)).cuda()
         model.fds.update_last_epoch_stats(epoch)
         model.fds.update_running_stats(encodings, targets, epoch)
