@@ -54,7 +54,7 @@ class ResNet(nn.Module):
                 feature_dim=512 * block.expansion, bucket_num=fds['bucket_num'], bucket_start=fds['bucket_start'],
                 start_update=fds['start_update'], start_smooth=fds['start_smooth'], kernel=fds['kernel'], ks=fds['ks'], sigma=fds['sigma'], momentum=fds['momentum']
             )
-        self.start_smooth = fds['start_smooth']
+            self.start_smooth = fds['start_smooth']
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

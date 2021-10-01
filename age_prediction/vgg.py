@@ -58,7 +58,7 @@ class VGG8(nn.Module):
                 sigma=fds['sigma'],
                 momentum=fds['momentum']
             )
-        self.start_smooth = fds['start_smooth']
+            self.start_smooth = fds['start_smooth']
 
 
     def forward(self, x, targets=None, epoch=None):
