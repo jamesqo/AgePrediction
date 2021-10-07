@@ -60,16 +60,16 @@ def parse_options():
     parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
     parser.add_argument('--lds_kernel', type=str, default='gaussian',
                         choices=['gaussian', 'triang', 'laplace'], help='LDS kernel type')
-    parser.add_argument('--lds_ks', type=int, default=9, help='LDS kernel size: should be odd number')
-    parser.add_argument('--lds_sigma', type=float, default=1, help='LDS gaussian/laplace kernel sigma')
+    parser.add_argument('--lds_ks', type=int, default=5, help='LDS kernel size: should be odd number')
+    parser.add_argument('--lds_sigma', type=float, default=2, help='LDS gaussian/laplace kernel sigma')
 
     parser.add_argument('--fds', action='store_true', default=False, help='whether to enable FDS')
     parser.add_argument('--fds_kernel', type=str, default='gaussian', choices=['gaussian', 'triang', 'laplace'], help='FDS kernel type')
-    parser.add_argument('--fds_ks', type=int, default=9, help='FDS kernel size: should be odd number')
-    parser.add_argument('--fds_sigma', type=float, default=1, help='FDS gaussian/laplace kernel sigma')
+    parser.add_argument('--fds_ks', type=int, default=5, help='FDS kernel size: should be odd number')
+    parser.add_argument('--fds_sigma', type=float, default=2, help='FDS gaussian/laplace kernel sigma')
     parser.add_argument('--start_update', type=int, default=0, help='which epoch to start FDS updating')
     parser.add_argument('--start_smooth', type=int, default=1, help='which epoch to start using FDS to smooth features')
-    parser.add_argument('--bucket_num', type=int, default=20, help='maximum bucket considered for FDS')
+    parser.add_argument('--bucket_num', type=int, default=100, help='maximum bucket considered for FDS')
     parser.add_argument('--bucket_start', type=int, default=0, help='minimum (starting) bucket for FDS')
     parser.add_argument('--fds_momentum', type=float, default=0.9, help='FDS momentum')
 
@@ -352,6 +352,9 @@ def main():
         best_val_loss = np.inf
         train_losses = []
         val_losses = []
+
+        if opts.n_epochs == 0:
+            torch.save(model.state_dict(), f"{checkpoint_dir}/best_model.pth")
 
         for epoch in range(opts.n_epochs):
             log(f"Epoch {epoch}/{opts.n_epochs}")

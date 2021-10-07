@@ -24,7 +24,7 @@ def describe_strat(cfg):
         desc = cfg['reweight']
         if cfg['lds']:
             desc += " + lds"
-        if cfg['fds']:
+        if 'fds' in cfg and cfg['fds']:
             desc += " + fds"
         return desc
     return 'baseline'
@@ -95,7 +95,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     df = list(all_results.values())[0]['val_preds']
     bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
 
-    job_descs.insert(0, ('baseline', "Baseline", '#888888', ''))
+    job_descs.insert(0, ('baseline', "Baseline", '#888888', '-'))
     for i, (desc, label, color, style) in enumerate(job_descs):
         key = f"{desc} ({arch})"
         df = all_results[key]['val_preds']
@@ -118,7 +118,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
         print(f"ρ for {key}: {pcorr:.3f}")
-        anno_x = [15, 30, 45][i]
+        anno_x = [15, 30, 45, 60, 75][i]
         anno_y = smoothed_losses[anno_x//5]-.5
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
 
@@ -147,28 +147,28 @@ def main():
     for arch in ('resnet18', 'vgg8', 'sfcn'):
         plot_val_losses(all_results, arch,
             [
-                ('under', "Undersampling", 'red', '')
+                ('under', "Undersampling", 'red', '-'),
                 ('scale-down', "Scaling down", 'red', '--'),
-                ('over', "Oversampling", 'royalblue', ''),
+                ('over', "Oversampling", 'royalblue', '-'),
                 ('scale-up', "Scaling up", 'royalblue', '--')
             ],
             f"val_losses_{arch}_resampling.png")
         plot_val_losses(all_results, arch,
             [
-                ('inv', "Inverse weighting", 'red', ''),
-                ('inv + lds', "Inverse weighting + LDS", 'royalblue', ''),
-                ('inv + fds', "Inverse weighting + FDS", 'yellow', ''),
-                ('inv + lds + fds', "Inverse weighting + LDS + FDS", 'green', '')
+                ('inv', "Inverse weighting", 'red', '-'),
+                ('inv + lds', "Inverse weighting + LDS", 'royalblue', '-'),
+                ('inv + fds', "Inverse weighting + FDS", 'orange', '-'),
+                ('inv + lds + fds', "Inverse weighting + LDS + FDS", 'green', '-')
             ],
             f"val_losses_{arch}_reweighting_inv.png")
         plot_val_losses(all_results, arch,
             [
-                ('sqrt_inv', "Square-root inverse weighting", 'red', ''),
-                ('sqrt_inv + lds', "Square-root inverse weighting + LDS", 'royalblue', ''),
-                ('sqrt_inv + fds', "Square-root inverse weighting + FDS", 'yellow', ''),
-                ('sqrt_inv + lds + fds', "Square-root inverse weighting + LDS + FDS", 'green', '')
+                ('sqrt_inv', "Square-root inverse weighting", 'red', '-'),
+                ('sqrt_inv + lds', "Square-root inverse weighting + LDS", 'royalblue', '-'),
+                ('sqrt_inv + fds', "Square-root inverse weighting + FDS", 'orange', '-'),
+                ('sqrt_inv + lds + fds', "Square-root inverse weighting + LDS + FDS", 'green', '-')
             ],
-            f"val_losses_{arch}_reweighting_inv.png")
+            f"val_losses_{arch}_reweighting_sqrt_inv.png")
     
     ## Plot histograms for each dataset + the combined dataset
     path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")

@@ -30,7 +30,7 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     return weights
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, fds=False, fds_kernel='gaussian', fds_ks=9, fds_sigma=1, labeled=True):
+    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, labeled=True):
         self.df = df
         self.weights = prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma)
         self.labeled = labeled
