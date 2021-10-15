@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from .utils import calibrate_mean_var
 
-print = logging.info
+#print = logging.info
 
 class FDS(nn.Module):
 
@@ -76,12 +76,20 @@ class FDS(nn.Module):
         self.num_samples_tracked.zero_()
 
     def update_last_epoch_stats(self, epoch):
+        print("update_last_epoch_stats")
+        print(f"epoch: {epoch}")
+
         if epoch == self.epoch + 1:
             self.epoch += 1
             self._update_last_epoch_stats()
             print(f"Updated smoothed statistics on Epoch [{epoch}]!")
 
     def update_running_stats(self, features, labels, epoch):
+        print("update_running_stats")
+        print(f"features: {features}")
+        print(f"labels: {labels}")
+        print(f"epoch: {epoch}")
+
         if epoch < self.epoch:
             return
 
@@ -113,6 +121,11 @@ class FDS(nn.Module):
         print(f"Updated running statistics with Epoch [{epoch}] features!")
 
     def smooth(self, features, labels, epoch):
+        print("smooth")
+        print(f"features: {features}")
+        print(f"labels: {labels}")
+        print(f"epoch: {epoch}")
+
         if epoch < self.start_smooth:
             return features
 

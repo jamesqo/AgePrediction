@@ -1,3 +1,5 @@
+import logging
+
 import torch.nn as nn
 
 from .fds import FDS
@@ -97,14 +99,16 @@ class ResNet(nn.Module):
 
         if self.training and self.uses_fds:
             if epoch >= self.start_smooth:
+                logging.info(f"Before: {encoding_s}")
                 encoding_s = self.fds.smooth(encoding_s, targets, epoch)
+                logging.info(f"After: {encoding_s}")
 
         x = self.linear(encoding_s)
 
         if self.training and self.uses_fds:
-            return x, encoding
+            return x, encoding, encoding_s
         else:
-            return x
+            return x, encoding
 
 def resnet18(**kwargs):
     return ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
