@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime
 import glob
 import json
+import logging
 import os
 import random
 import re
@@ -27,15 +28,7 @@ SPLITS_DIR = os.path.join(ROOT_DIR, "folderlist")
 START_TIME = datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
 LOG_FILE = ''
 
-def log(message):
-    if LOG_FILE == '':
-        print(message)
-        return
-
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-
-    with open(LOG_FILE, 'a+') as log_file:
-        log_file.write(f"{message}\n")
+print = logging.info
 
 def parse_options():
     parser = argparse.ArgumentParser()
@@ -93,10 +86,13 @@ def parse_options():
         os.remove(LOG_FILE)
     except FileNotFoundError:
         pass
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    logging.basicConfig(level=logging.DEBUG, filename=LOG_FILE, filemode="a+",
+                        format="%(asctime)-15s %(levelname)-8s %(message)s")
 
     for arg in vars(args):
-        log(f"{arg}: {getattr(args, arg)}")
-    log('='*20)
+        print(f"{arg}: {getattr(args, arg)}")
+    print('='*20)
     return args
 
 def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
@@ -134,12 +130,12 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
     return combined_df
 
 def resample(df, mode, undersamp_limit, oversamp_limit):
-    log("Resampling training data")
+    print("Resampling training data")
 
     bins = sorted(set(df['agebin']))
     bin_counts = {bin: sum(df['agebin'] == bin) for bin in bins}
     bin_ratios = {bin: count / df.shape[0] for bin, count in bin_counts.items()}
-    log(f"Bin counts: {bin_counts}")
+    print(f"Bin counts: {bin_counts}")
 
     if mode == 'none':
         pass
@@ -183,7 +179,7 @@ def resample(df, mode, undersamp_limit, oversamp_limit):
     else:
         raise Exception(f"Invalid sampling mode: {mode}")
 
-    log(f"Number of images in final training dataset: {df.shape[0]}")
+    print(f"Number of images in final training dataset: {df.shape[0]}")
     return df
 
 def setup_model(arch, device, checkpoint_file=None, fds=None):
@@ -226,11 +222,12 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         if arch == 'sfcn':
             images = images.unsqueeze(1)
         if model.uses_fds:
-            age_preds, batch_encodings = model(images, targets=ages, epoch=epoch)
+            age_bins = torch.floor(ages)
+            age_preds, batch_encodings, _ = model(images, targets=age_bins, epoch=epoch)
             encodings.extend(batch_encodings.detach().cpu().numpy())
-            targets.extend(ages.cpu().numpy())
+            targets.extend(age_bins.cpu().numpy())
         else:
-            age_preds = model(images)
+            age_preds, _ = model(images)
         age_preds = age_preds.view(-1)
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
@@ -238,10 +235,10 @@ def train(model, arch, optimizer, train_loader, device, epoch):
 
         losses.append(loss.item())
         if batch_idx % 10 == 0:
-            log(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
+            print(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
         
     if model.uses_fds:
-        encodings, targets = torch.from_numpy(np.vstack(encodings)).cuda(), torch.from_numpy(np.hstack(targets)).cuda()
+        encodings, targets = torch.from_numpy(np.vstack(encodings)).to(device), torch.from_numpy(np.hstack(targets)).to(device)
         model.fds.update_last_epoch_stats(epoch)
         model.fds.update_running_stats(encodings, targets, epoch)
     
@@ -263,7 +260,8 @@ def validate(model, arch, val_loader, device):
             images, ages = images.to(device), ages.to(device)
             if arch == 'sfcn':
                 images = images.unsqueeze(1)
-            age_preds = model(images).view(-1)
+            age_preds, _ = model(images)
+            age_preds = age_preds.view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
@@ -278,7 +276,7 @@ def main():
 
     opts = parse_options()
 
-    log(f"Starting at {START_TIME}")
+    print(f"Starting at {START_TIME}")
 
     checkpoint_dir = os.path.join(ROOT_DIR, "checkpoints", opts.eval or opts.job_id)
     results_dir = os.path.join(ROOT_DIR, "results", opts.job_id)
@@ -286,7 +284,7 @@ def main():
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
 
-    log("Setting up dataset")
+    print("Setting up dataset")
 
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
@@ -303,10 +301,10 @@ def main():
 
     if opts.print_bin_counts:
         with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-            log(df['agebin'].value_counts())
-            log(_train_df['agebin'].value_counts())
-            log(train_df['agebin'].value_counts())
-            log(val_df['agebin'].value_counts())
+            print(df['agebin'].value_counts())
+            print(_train_df['agebin'].value_counts())
+            print(train_df['agebin'].value_counts())
+            print(val_df['agebin'].value_counts())
         sys.exit(0)
 
     train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
@@ -324,7 +322,7 @@ def main():
         cfg['val_counts'] = json.loads(val_df['agebin'].value_counts().to_json())
         json.dump(cfg, f, sort_keys=True, indent=4)
 
-    log("Setting up model")
+    print("Setting up model")
 
     device = torch.device('cpu' if opts.cpu else 'cuda')
     fds = None
@@ -346,7 +344,7 @@ def main():
     ## Training and evaluation
 
     if opts.eval is None:
-        log("Starting training process")
+        print("Starting training process")
 
         best_epoch = None
         best_val_loss = np.inf
@@ -357,11 +355,11 @@ def main():
             torch.save(model.state_dict(), f"{checkpoint_dir}/best_model.pth")
 
         for epoch in range(opts.n_epochs):
-            log(f"Epoch {epoch}/{opts.n_epochs}")
+            print(f"Epoch {epoch}/{opts.n_epochs}")
             train_loss = train(model, opts.arch, optimizer, train_loader, device, epoch)
-            log(f"Mean training loss: {train_loss}")
+            print(f"Mean training loss: {train_loss}")
             val_loss, _ = validate(model, opts.arch, val_loader, device)
-            log(f"Mean validation loss: {val_loss}")
+            print(f"Mean validation loss: {val_loss}")
             scheduler.step()
 
             train_losses.append(train_loss)
@@ -374,9 +372,9 @@ def main():
                 best_epoch = epoch
                 best_val_loss = val_loss
         
-        log(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
+        print(f"Best model had validation loss of {best_val_loss}, occurred at epoch {best_epoch}")
     
-    log("Evaluating best model on val dataset")
+    print("Evaluating best model on val dataset")
    
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth", map_location=device)
     model.load_state_dict(checkpoint)
@@ -385,7 +383,7 @@ def main():
     
     ## Save results so we can plot them later
 
-    log("Saving results")
+    print("Saving results")
     
     if opts.eval is None:
         np.savetxt(f"{results_dir}/train_losses_over_time.txt", train_losses)

@@ -49,7 +49,8 @@ class FDS(nn.Module):
             kernel_window = list(map(laplace, np.arange(-half_ks, half_ks + 1))) / sum(map(laplace, np.arange(-half_ks, half_ks + 1)))
 
         print(f'Using FDS: [{kernel.upper()}] ({ks}/{sigma})')
-        return torch.tensor(kernel_window, dtype=torch.float64).cuda()
+        res = torch.tensor(kernel_window, dtype=torch.float64)
+        return res.cuda() if torch.cuda.is_available() else res
 
     def _update_last_epoch_stats(self):
         self.running_mean_last_epoch = self.running_mean
@@ -111,6 +112,7 @@ class FDS(nn.Module):
                 (1 - factor) * curr_var + factor * self.running_var[int(label - self.bucket_start)]
 
         print(f"Updated running statistics with Epoch [{epoch}] features!")
+
 
     def smooth(self, features, labels, epoch):
         if epoch < self.start_smooth:

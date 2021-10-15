@@ -1,6 +1,10 @@
+import logging
+
 import torch.nn as nn
 
 from .fds import FDS
+
+print = logging.info
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -102,9 +106,9 @@ class ResNet(nn.Module):
         x = self.linear(encoding_s)
 
         if self.training and self.uses_fds:
-            return x, encoding
+            return x, encoding, encoding_s
         else:
-            return x
+            return x, encoding
 
 def resnet18(**kwargs):
     return ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)

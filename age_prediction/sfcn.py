@@ -1,7 +1,11 @@
+import logging
+
 import torch
 from torch import nn
 
 from .fds import FDS
+
+print = logging.info
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, padding=1):
@@ -83,6 +87,6 @@ class SFCN(nn.Module):
         x = self.classifier(encoding_s)
 
         if self.training and self.uses_fds:
-            return x, encoding
+            return x, encoding, encoding_s
         else:
-            return x
+            return x, encoding
