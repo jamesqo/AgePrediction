@@ -401,6 +401,8 @@ def main():
             print(encodings_s.shape)
             train_features_before_smoothing.append(encodings.detach().cpu().numpy().flatten()[:20])
             train_features_after_smoothing.append(encodings_s.detach().cpu().numpy().flatten()[:20])
+            l2_distance = np.linalg.norm(encodings_s.detach().cpu().numpy().flatten() - encodings.detach().cpu().numpy().flatten())
+            print(l2_distance)
         
         model.eval()
         for images, ages, weights in val_loader:

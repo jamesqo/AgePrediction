@@ -99,9 +99,9 @@ class ResNet(nn.Module):
 
         if self.training and self.uses_fds:
             if epoch >= self.start_smooth:
-                logging.info(f"Before: {encoding_s}")
+                print(f"Before: {encoding_s}")
                 encoding_s = self.fds.smooth(encoding_s, targets, epoch)
-                logging.info(f"After: {encoding_s}")
+                print(f"After: {encoding_s}")
 
         x = self.linear(encoding_s)
 
