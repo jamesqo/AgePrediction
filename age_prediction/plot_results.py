@@ -51,6 +51,13 @@ def load_results():
         results['val_preds'] = val_preds
         results['config'] = cfg
         all_results[job_desc] = results
+
+        if os.path.exists(f"{RESULTS_DIR}/{job_id}/val_features.csv"):
+            results['train_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_df.csv")
+            results['train_features_before_smoothing'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_features_before_smoothing.csv")
+            results['train_features_after_smoothing'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_features_after_smoothing.csv")
+            results['val_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_df.csv")
+            results['val_features'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_features.csv")
     
     return all_results
 
@@ -210,6 +217,44 @@ def main():
         plt.clf()
 
     print("Done")
+
+    ## Plot the mean of each feature dim for FDS jobs
+    for results in all_results.values():
+        if results['train_df']:
+            train_before = results['train_features_before_smoothing']
+            train_after = results['train_features_after_smoothing']
+            val = results['val_features']
+
+            for dim in range(20):
+                col = f'feat{dim}'
+                vals = train_before[col]
+                bins = np.arange(18)
+                y = [np.mean(vals[(vals['age'] // 5) == bin]) for bin in bins]
+                display_bins = [5*bin for bin in bins]
+
+                plt.plot(display_bins, y)
+                plt.title(f"Mean values for feature dim = {dim} in train set, before smoothing")
+                plt.xlabel("Age")
+                plt.ylabel("Mean value")
+                plt.savefig(os.path.join(FIGURES_DIR, f"train_before_{col}.png"))
+
+                vals = train_after[col]
+                y = [np.mean(vals[(vals['age'] // 5) == bin]) for bin in bins]
+                
+                plt.plot(display_bins, y)
+                plt.title(f"Mean values for feature dim = {dim} in train set, after smoothing")
+                plt.xlabel("Age")
+                plt.ylabel("Mean value")
+                plt.savefig(os.path.join(FIGURES_DIR, f"train_after_{col}.png"))
+
+                vals = val[col]
+                y = [np.mean(vals[(vals['age'] // 5) == bin]) for bin in bins]
+                
+                plt.plot(display_bins, y)
+                plt.title(f"Mean values for feature dim = {dim} in validation set")
+                plt.xlabel("Age")
+                plt.ylabel("Mean value")
+                plt.savefig(os.path.join(FIGURES_DIR, f"val_{col}.png"))
 
 if __name__ == '__main__':
     main()
