@@ -49,8 +49,8 @@ class FDS(nn.Module):
             kernel_window = list(map(laplace, np.arange(-half_ks, half_ks + 1))) / sum(map(laplace, np.arange(-half_ks, half_ks + 1)))
 
         print(f'Using FDS: [{kernel.upper()}] ({ks}/{sigma})')
-        t = torch.tensor(kernel_window, dtype=torch.float64)
-        return t.cuda() if torch.cuda.is_available() else t
+        res = torch.tensor(kernel_window, dtype=torch.float64)
+        return res.cuda() if torch.cuda.is_available() else res
 
     def _update_last_epoch_stats(self):
         self.running_mean_last_epoch = self.running_mean
