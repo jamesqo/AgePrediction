@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from .utils import calibrate_mean_var
 
-#print = logging.info
+print = logging.info
 
 class FDS(nn.Module):
 
