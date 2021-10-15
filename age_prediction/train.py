@@ -204,9 +204,6 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
 
 def train(model, arch, optimizer, train_loader, device, epoch):
     def weighted_l1_loss(inputs, targets, weights):
-        print(f"Inputs: {inputs}")
-        print(f"Targets: {targets}")
-        print(f"Weights: {weights}")
         loss = F.l1_loss(inputs, targets, reduction='none')
         loss *= weights.expand_as(loss)
         loss = torch.mean(loss)
@@ -225,9 +222,9 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         if arch == 'sfcn':
             images = images.unsqueeze(1)
         if model.uses_fds:
-            age_preds, batch_encodings, _ = model(images, targets=ages, epoch=epoch)
+            age_preds, batch_encodings, _ = model(images, targets=torch.floor(ages), epoch=epoch)
             encodings.extend(batch_encodings.detach().cpu().numpy())
-            targets.extend(ages.cpu().numpy())
+            targets.extend(torch.floor(ages).cpu().numpy())
         else:
             age_preds, _ = model(images)
         age_preds = age_preds.view(-1)
@@ -240,7 +237,9 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             print(f"Batch {batch_idx} loss {loss} mean loss {np.mean(losses)}")
         
     if model.uses_fds:
-        encodings, targets = torch.from_numpy(np.vstack(encodings)).cuda(), torch.from_numpy(np.hstack(targets)).cuda()
+        encodings, targets = torch.from_numpy(np.vstack(encodings)), torch.from_numpy(np.hstack(targets))
+        if torch.cuda.is_available():
+            encodings, targets = encodings.cuda(), targets.cuda()
         model.fds.update_last_epoch_stats(epoch)
         model.fds.update_running_stats(encodings, targets, epoch)
     

@@ -97,13 +97,15 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         encoding = x.view(x.size(0), -1)
 
+        # encoding: (5=batch_size, 512)
+        # encoding_s: (5, 512)
         encoding_s = encoding
 
         if self.training and self.uses_fds:
             if epoch >= self.start_smooth:
-                print(f"Before: {encoding_s}")
+                #print(f"Before: {encoding}")
                 encoding_s = self.fds.smooth(encoding_s, targets, epoch)
-                print(f"After: {encoding_s}")
+                #print(f"After: {encoding_s}")
 
         x = self.linear(encoding_s)
 
