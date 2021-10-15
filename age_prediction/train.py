@@ -266,7 +266,8 @@ def validate(model, arch, val_loader, device):
             images, ages = images.to(device), ages.to(device)
             if arch == 'sfcn':
                 images = images.unsqueeze(1)
-            age_preds, _ = model(images).view(-1)
+            age_preds, _ = model(images)
+            age_preds = age_preds.view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
@@ -396,8 +397,10 @@ def main():
             if opts.arch == 'sfcn':
                 images = images.unsqueeze(1)
             _, encodings, encodings_s = model(images, targets=ages, epoch=epoch)
-            train_features_before_smoothing.append(encodings.detach().cpu().numpy()[:20])
-            train_features_after_smoothing.append(encodings_s.detach().cpu().numpy()[:20])
+            print(encodings.shape)
+            print(encodings_s.shape)
+            train_features_before_smoothing.append(encodings.detach().cpu().numpy().flatten()[:20])
+            train_features_after_smoothing.append(encodings_s.detach().cpu().numpy().flatten()[:20])
         
         model.eval()
         for images, ages, weights in val_loader:
@@ -405,7 +408,39 @@ def main():
             if opts.arch == 'sfcn':
                 images = images.unsqueeze(1)
             _, encodings = model(images)
-            val_features.append(encodings.detach().cpu().numpy()[:20])
+            print(encodings.shape)
+            val_features.append(encodings.detach().cpu().numpy().flatten()[:20])
+        
+        colnames = [f'feat{f}' for f in range(20)]
+        train_features_before_smoothing = pd.DataFrame(train_features_before_smoothing, columns=colnames)
+        train_features_after_smoothing = pd.DataFrame(train_features_after_smoothing, columns=colnames)
+        val_features = pd.DataFrame(val_features, columns=colnames)
+
+        '''
+        train_features_before_smoothing = pd.concat([train_df, train_features_before_smoothing], axis=1)
+        train_features_after_smoothing = pd.concat([train_df, train_features_after_smoothing], axis=1)
+        val_features = pd.concat([val_df, val_features], axis=1)
+        '''
+
+        """
+        for df in (train_features_before_smoothing, train_features_after_smoothing):
+            df['id'] = train_df['id']
+            df['age'] = train_df['age']
+            df['sex'] = train_df['sex']
+            df['path'] = train_df['path']
+        
+        val_features['id'] = val_df['id']
+        val_features['age'] = val_df['age']
+        val_features['sex'] = val_df['sex']
+        val_features['path'] = val_df['path']
+        """
+
+        train_df.to_csv(f"{results_dir}/train_df.csv", index=False)
+        val_df.to_csv(f"{results_dir}/val_df.csv", index=False)
+
+        train_features_before_smoothing.to_csv(f"{results_dir}/train_features_before_smoothing.csv", index=False)
+        train_features_after_smoothing.to_csv(f"{results_dir}/train_features_after_smoothing.csv", index=False)
+        val_features.to_csv(f"{results_dir}/val_features.csv", index=False)
     
     log("Evaluating best model on val dataset")
    
