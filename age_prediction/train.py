@@ -19,6 +19,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 
 from .dataset import AgePredictionDataset
+from .fianet import FiANet
 from .resnet import resnet18
 from .sfcn import SFCN
 from .vgg import VGG8
@@ -33,7 +34,7 @@ print = logging.info
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'fianet'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -101,6 +102,10 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         path = path.replace('/NIH-PD/', '/NIH_PD/')
         return path
     
+    def get_ravens_path(path):
+        path = path.replace('reg', 'ravens')
+        return path
+    
     def extract_dataset(path):
         name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
         return 'MGHBCH' if name in ('MGH', 'BCH') else name
@@ -112,6 +117,7 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
 
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
         df['path'] = df['path'].apply(correct_path)
+        df['ravens_path'] = df['path'].apply(get_ravens_path)
         df['agebin'] = df['age'] // bin_width
         df['split'] = split_num
         df['dataset'] = df['path'].apply(extract_dataset)
@@ -191,6 +197,9 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
         model = VGG8(in_channels=130, num_classes=1, fds=fds)
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1, fds=fds)
+    elif arch == 'fianet':
+        # TODO: add FDS support
+        model = FiANet()
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -204,6 +213,7 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
 
 def train(model, arch, optimizer, train_loader, device, epoch):
     def weighted_l1_loss(inputs, targets, weights):
+        inputs = inputs.view(-1)
         loss = F.l1_loss(inputs, targets, reduction='none')
         loss *= weights.expand_as(loss)
         loss = torch.mean(loss)
@@ -212,24 +222,41 @@ def train(model, arch, optimizer, train_loader, device, epoch):
     model.train()
 
     losses = []
-
     encodings = []
     targets = []
 
-    for batch_idx, (images, ages, weights) in enumerate(train_loader):
-        images, ages, weights = images.to(device), ages.to(device), weights.to(device)
-        optimizer.zero_grad()
-        if arch == 'sfcn':
+    is_3d = (arch == 'sfcn' or arch == 'fianet')
+    fianet = (arch == 'fianet')
+
+    for batch_idx, inst in enumerate(train_loader):
+        if fianet:
+            images, ravens_images, ages, weights = inst
+            images, ravens_images, ages, weights = images.to(device), ravens_images.to(device), ages.to(device), weights.to(device)
+        else:
+            images, ages, weights = inst
+            images, ages, weights = images.to(device), ages.to(device), weights.to(device)
+        if is_3d:
             images = images.unsqueeze(1)
+        if fianet:
+            ravens_images = ravens_images.unsqueeze(1)
+        model_inputs = [images, ravens_images] if fianet else [images]
+
+        optimizer.zero_grad()
         if model.uses_fds:
             age_bins = torch.floor(ages)
-            age_preds, batch_encodings, _ = model(images, targets=age_bins, epoch=epoch)
+            *age_preds, batch_encodings, _ = model(*model_inputs, targets=age_bins, epoch=epoch)
             encodings.extend(batch_encodings.detach().cpu().numpy())
             targets.extend(age_bins.cpu().numpy())
         else:
-            age_preds, _ = model(images)
-        age_preds = age_preds.view(-1)
-        loss = weighted_l1_loss(age_preds, ages, weights)
+            *age_preds, _ = model(*model_inputs)
+        if fianet:
+            age_preds_1, age_preds_2, age_preds_combined = age_preds
+            loss = weighted_l1_loss(age_preds_1, ages, weights)
+            loss += weighted_l1_loss(age_preds_2, ages, weights)
+            loss += weighted_l1_loss(age_preds_combined, ages, weights)
+        else:
+            age_preds, = age_preds
+            loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
         optimizer.step()
 
@@ -307,8 +334,14 @@ def main():
             print(val_df['agebin'].value_counts())
         sys.exit(0)
 
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=opts.lds, lds_kernel=opts.lds_kernel, lds_ks=opts.lds_ks, lds_sigma=opts.lds_sigma)
-    val_dataset = AgePredictionDataset(val_df)
+    lds = {
+        'kernel': opts.lds_kernel,
+        'ks': opts.lds_ks,
+        'sigma': opts.lds_sigma
+    } if opts.lds else None
+    include_ravens = (opts.arch == 'fianet')
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=lds, ravens=include_ravens)
+    val_dataset = AgePredictionDataset(val_df, ravens=include_ravens)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = data.DataLoader(val_dataset, batch_size=1)

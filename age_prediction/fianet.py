@@ -179,11 +179,11 @@ class Fusion(nn.Module):
 		return y
 
 class FiANet(nn.Module):
-	def __init__(self,num_classes=1):
+	def __init__(self, num_classes=1):
 		super().__init__()
 
-		self.net1 = Resnet(num_classes)
-		self.net2 = Resnet(num_classes)
+		self.net1 = Resnet(num_classes=num_classes)
+		self.net2 = Resnet(num_classes=num_classes)
 		
 		self.fus1 = Fusion(64,128,True)
 		self.fus2 = Fusion(128,256,False)
@@ -194,6 +194,8 @@ class FiANet(nn.Module):
 		self.maxp = nn.MaxPool3d(2,2)
 		self.avgpool_3d = nn.AdaptiveAvgPool3d(1)
 		self.regression_3d = nn.Linear(512,num_classes)
+
+		self.uses_fds = False # TODO: add FDS support
 
 	def forward(self,ix1,ix2):
 		x1,x2,x3,x4,f1 = self.net1(ix1)

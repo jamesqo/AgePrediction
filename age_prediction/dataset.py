@@ -6,7 +6,7 @@ from torch.utils import data
 
 from .utils import get_lds_kernel_window
 
-def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
+def prepare_weights(df, reweight, lds):
     if reweight == 'none':
         return None
     
@@ -18,7 +18,7 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
         num_per_label = [np.sqrt(bin_counts[bin]) for bin in df['agebin']]
     
     if lds:
-        lds_kernel_window = get_lds_kernel_window(lds_kernel, lds_ks, lds_sigma)
+        lds_kernel_window = get_lds_kernel_window(lds['kernel'], lds['ks'], lds['sigma'])
         smoothed_value = pd.Series(
             convolve1d(bin_counts.values, weights=lds_kernel_window, mode='constant'),
             index=bin_counts.index)
@@ -30,10 +30,11 @@ def prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma):
     return weights
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight='none', lds=False, lds_kernel='gaussian', lds_ks=9, lds_sigma=1, labeled=True):
+    def __init__(self, df, reweight='none', lds=None, labeled=True, ravens=False):
         self.df = df
-        self.weights = prepare_weights(df, reweight, lds, lds_kernel, lds_ks, lds_sigma)
+        self.weights = prepare_weights(df, reweight, lds)
         self.labeled = labeled
+        self.ravens = ravens
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
@@ -44,9 +45,15 @@ class AgePredictionDataset(data.Dataset):
         if self.labeled:
             age = row['age']
             weight = self.weights[idx] if self.weights is not None else 1.
-            return (image, age, weight)
+
+        if self.ravens:
+            ravens_image = nibabel.load(row['ravens_path']).get_fdata()
+            ravens_image /= 10_000 # Normalization
+        
+        if self.ravens:
+            return (image, ravens_image, age, weight) if self.labeled else (image, ravens_image)
         else:
-            return image
+            return (image, age, weight) if self.labeled else image
 
     def __len__(self):
         return len(self.df)

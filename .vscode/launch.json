@@ -5,13 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python",
+            "name": "Train SFCN",
             "type": "python",
             "request": "launch",
             "module": "age_prediction.train",
             "console": "integratedTerminal",
             "python": "/home/ch225092/.conda/envs/james/bin/python",
-            "args": ["resnet18", "--job-id", "__vscode-test", "--reweight", "inv", "--fds", "--max-samples", "500", "--min-bin-count", "2", "--cpu"]
+            "args": ["sfcn", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu"]
+        },
+        {
+            "name": "Train FiANet",
+            "type": "python",
+            "request": "launch",
+            "module": "age_prediction.train",
+            "console": "integratedTerminal",
+            "python": "/home/ch225092/.conda/envs/james/bin/python",
+            "args": ["fianet", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu", "--batch-size", "1"]
         }
     ]
 }
