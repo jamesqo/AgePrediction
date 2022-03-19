@@ -185,11 +185,16 @@ class FiANet(nn.Module):
 		self.net1 = Resnet(num_classes=num_classes)
 		self.net2 = Resnet(num_classes=num_classes)
 		
+		'''
 		self.fus1 = Fusion(64,128,True)
 		self.fus2 = Fusion(128,256,False)
 		self.fus3 = Fusion(256,512,False)
 		self.fus4 = Fusion(512,512,False)
-		
+		'''
+		self.fus1 = Fusion(32,64,True)
+		self.fus2 = Fusion(64,128,False)
+		self.fus3 = Fusion(128,256,False)
+		self.fus4 = Fusion(256,512,False)
 
 		self.maxp = nn.MaxPool3d(2,2)
 		self.avgpool_3d = nn.AdaptiveAvgPool3d(1)

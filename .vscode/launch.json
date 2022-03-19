@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Train SFCN",
             "type": "python",
@@ -21,6 +22,15 @@
             "console": "integratedTerminal",
             "python": "/home/ch225092/.conda/envs/james/bin/python",
             "args": ["fianet", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu", "--batch-size", "1"]
+        },
+        {
+            "name": "Train GLT",
+            "type": "python",
+            "request": "launch",
+            "module": "age_prediction.train",
+            "console": "integratedTerminal",
+            "python": "/home/ch225092/.conda/envs/james/bin/python",
+            "args": ["glt", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu", "--batch-size", "2"]
         }
     ]
 }
