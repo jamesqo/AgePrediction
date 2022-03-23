@@ -30,39 +30,22 @@ def prepare_weights(df, reweight, lds):
     return weights
 
 class AgePredictionDataset(data.Dataset):
-    def __init__(self, df, reweight='none', lds=None, labeled=True, ravens=False, zoom=False):
+    def __init__(self, df, reweight='none', lds=None, labeled=True):
         self.df = df
         self.weights = prepare_weights(df, reweight, lds)
         self.labeled = labeled
-        self.ravens = ravens
-        self.zoom = zoom
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         image = nibabel.load(row['path']).get_fdata()
         image = image[54:184, 25:195, 12:132] # Crop out zeroes
         image /= np.percentile(image, 95) # Normalize intensity
-        if self.zoom:
-            factor = (96/130, 96/170, 96/120)
-            image = zoom(image, zoom=factor)
-            assert image.shape == (96,96,96)
 
         if self.labeled:
             age = row['age']
             weight = self.weights[idx] if self.weights is not None else 1.
 
-        if self.ravens:
-            ravens_image = nibabel.load(row['ravens_path']).get_fdata()
-            ravens_image /= 10_000 # Normalization
-            if self.zoom:
-                factor = (96/ravens_image.shape[0], 96/ravens_image.shape[1], 96/ravens_image.shape[2])
-                ravens_image = zoom(ravens_image, zoom=factor)
-                assert ravens_image.shape == (96,96,96)
-        
-        if self.ravens:
-            return (image, ravens_image, age, weight) if self.labeled else (image, ravens_image)
-        else:
-            return (image, age, weight) if self.labeled else image
+        return (image, age, weight) if self.labeled else image
 
     def __len__(self):
         return len(self.df)
