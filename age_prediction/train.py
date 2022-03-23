@@ -134,6 +134,13 @@ def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
         bins_below_cutoff = [bin for bin in bin_counts.keys() if bin_counts[bin] < min_bin_count]
         combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
     
+    # Filter out files that don't exist
+    exists = combined_df['path'].apply(os.path.isfile)
+    missing_files = combined_df['path'][~exists]
+    print(f"{len(missing_files)} file(s) are missing:")
+    print('\n'.join(missing_files))
+    combined_df = combined_df[exists]
+    
     return combined_df
 
 def resample(df, mode, undersamp_limit, oversamp_limit):
@@ -202,7 +209,7 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
         # TODO: add FDS support
         model = FiANet()
     elif arch == 'glt':
-        model = GlobalLocalBrainAge(inplace=130)
+        model = GlobalLocalBrainAge(inplace=130, fds=fds)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -250,15 +257,28 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         if not glt:
             if model.uses_fds:
                 age_bins = torch.floor(ages)
-                *age_preds, batch_encodings, _ = model(*model_inputs, targets=age_bins, epoch=epoch)
+                *age_preds, batch_encodings = model(*model_inputs, targets=age_bins, epoch=epoch)
                 encodings.extend(batch_encodings.detach().cpu().numpy())
                 targets.extend(age_bins.cpu().numpy())
             else:
-                *age_preds, _ = model(*model_inputs)
+                age_preds = model(*model_inputs)
         else:
-            age_preds = model(*model_inputs)
-            del age_preds[0]
-            age_preds = [torch.mean(torch.stack(age_preds).squeeze(2))]
+            if model.uses_fds:
+                age_bins = torch.floor(ages)
+                age_preds, batch_encodings = model(*model_inputs, targets=age_bins, epoch=epoch)
+                # Remove the first prediction
+                del age_preds[0]
+                del batch_encodings[0]
+                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
+
+                for inst_encodings in batch_encodings:
+                    encodings.extend(inst_encodings.detach().cpu().numpy())
+                    targets.extend(age_bins.cpu().numpy())
+            else:
+                age_preds = model(*model_inputs)
+                # Remove the first prediction
+                del age_preds[0]
+                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
         # Caluclate loss
         if fianet:
             age_preds_1, age_preds_2, age_preds_combined = age_preds
@@ -266,7 +286,6 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             loss += weighted_l1_loss(age_preds_2, ages, weights)
             loss += weighted_l1_loss(age_preds_combined, ages, weights)
         else:
-            age_preds, = age_preds
             loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
         optimizer.step()
@@ -298,7 +317,7 @@ def validate(model, arch, val_loader, device):
             images, ages = images.to(device), ages.to(device)
             if arch == 'sfcn':
                 images = images.unsqueeze(1)
-            age_preds, _ = model(images)
+            age_preds = model(images)
             age_preds = age_preds.view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 

@@ -106,9 +106,9 @@ class ResNet(nn.Module):
         x = self.linear(encoding_s)
 
         if self.training and self.uses_fds:
-            return x, encoding, encoding_s
-        else:
             return x, encoding
+        else:
+            return x
 
 def resnet18(**kwargs):
     return ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)

@@ -87,6 +87,6 @@ class SFCN(nn.Module):
         x = self.classifier(encoding_s)
 
         if self.training and self.uses_fds:
-            return x, encoding, encoding_s
-        else:
             return x, encoding
+        else:
+            return x
