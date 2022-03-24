@@ -264,8 +264,8 @@ class GlobalLocalBrainAge(nn.Module):
         
     def forward(self,xinput, targets=None, epoch=None):
         _,_,H,W=xinput.size()
-        outlist = []
-        encodings = []
+        outlist = [] # (N_p, B, 1) where N_p == number of predictors, B == batch size
+        encodings = [] # (N_p, B, out_hidden_size)
         
         xglo = self.global_feat(xinput)
         xgfeat = torch.flatten(self.avg(xglo),1)

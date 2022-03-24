@@ -244,9 +244,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             age_bins = torch.floor(ages)
             age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
             if glt:
-                # Remove the first prediction, average the rest
-                del age_preds[0]
-                del batch_encodings[0]
+                # Average the list of predictions
                 age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
 
                 for inst_encodings in batch_encodings:
@@ -258,8 +256,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
         else:
             age_preds = model(images)
             if glt:
-                # Remove the first prediction, average the rest
-                del age_preds[0]
+                # Average the list of predictions
                 age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
@@ -281,6 +278,9 @@ def validate(model, arch, val_loader, device):
 
     losses = []
     all_preds = []
+    
+    is_3d = (arch == 'sfcn')
+    glt = (arch == 'glt')
 
     with torch.no_grad():
         for (images, ages, _) in val_loader:
@@ -290,10 +290,15 @@ def validate(model, arch, val_loader, device):
             if not torch.is_tensor(ages):
                 ages = torch.tensor(ages).unsqueeze(0)
             images, ages = images.to(device), ages.to(device)
-            if arch == 'sfcn':
+            if is_3d:
                 images = images.unsqueeze(1)
             age_preds = model(images)
-            age_preds = age_preds.view(-1)
+            if glt:
+                # Delete the first (global) prediction, which is only used for training, and average the rest
+                del age_preds[0]
+                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
+            else:
+                age_preds = age_preds.view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
