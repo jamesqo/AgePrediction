@@ -240,20 +240,11 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             images = images.unsqueeze(1)
 
         optimizer.zero_grad()
-        # Get model outputs
-        if not glt:
-            if model.uses_fds:
-                age_bins = torch.floor(ages)
-                *age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
-                encodings.extend(batch_encodings.detach().cpu().numpy())
-                targets.extend(age_bins.cpu().numpy())
-            else:
-                age_preds = model(images)
-        else:
-            if model.uses_fds:
-                age_bins = torch.floor(ages)
-                age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
-                # Remove the first prediction
+        if model.uses_fds:
+            age_bins = torch.floor(ages)
+            age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
+            if glt:
+                # Remove the first prediction, average the rest
                 del age_preds[0]
                 del batch_encodings[0]
                 age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
@@ -262,11 +253,14 @@ def train(model, arch, optimizer, train_loader, device, epoch):
                     encodings.extend(inst_encodings.detach().cpu().numpy())
                     targets.extend(age_bins.cpu().numpy())
             else:
-                age_preds = model(images)
-                # Remove the first prediction
+                encodings.extend(batch_encodings.detach().cpu().numpy())
+                targets.extend(age_bins.cpu().numpy())
+        else:
+            age_preds = model(images)
+            if glt:
+                # Remove the first prediction, average the rest
                 del age_preds[0]
                 age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
-        # Caluclate loss
         loss = weighted_l1_loss(age_preds, ages, weights)
         loss.backward()
         optimizer.step()
