@@ -240,25 +240,30 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             images = images.unsqueeze(1)
 
         optimizer.zero_grad()
-        if model.uses_fds:
-            age_bins = torch.floor(ages)
-            age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
-            if glt:
-                # Average the list of predictions
-                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
 
-                for inst_encodings in batch_encodings:
-                    encodings.extend(inst_encodings.detach().cpu().numpy())
-                    targets.extend(age_bins.cpu().numpy())
-            else:
+        if not glt:
+            if model.uses_fds:
+                age_bins = torch.floor(ages)
+                age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
                 encodings.extend(batch_encodings.detach().cpu().numpy())
                 targets.extend(age_bins.cpu().numpy())
+            else:
+                age_preds = model(images)
+            loss = weighted_l1_loss(age_preds, ages, weights)
         else:
-            age_preds = model(images)
-            if glt:
-                # Average the list of predictions
-                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
-        loss = weighted_l1_loss(age_preds, ages, weights)
+            if model.uses_fds:
+                age_bins = torch.floor(ages)
+                age_preds_lst, batch_encodings_lst = model(images, targets=age_bins, epoch=epoch)
+
+                for batch_encodings in batch_encodings_lst:
+                    encodings.extend(batch_encodings.detach().cpu().numpy())
+                    targets.extend(age_bins.cpu().numpy())
+            else:
+                age_preds_lst = model(images)
+            loss = torch.sum(torch.stack(
+                [weighted_l1_loss(age_preds, ages, weights) for age_preds in age_preds_lst]
+            ))
+
         loss.backward()
         optimizer.step()
 
