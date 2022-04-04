@@ -46,10 +46,6 @@ def parse_options():
 
     parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none', help='sampling strategy')
     parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none', help='reweighting strategy')
-    parser.add_argument('--bin-width', type=int, default=1, help='width of age bins')
-    parser.add_argument('--min-bin-count', type=int, default=10, help='minimum number of samples per age bin (bins with fewer samples will be removed)')
-    parser.add_argument('--undersamp-limit', type=int, default=18, help='minimum number of samples each age bin will be deflated to when undersampling (bins with fewer samples will be oversampled)')
-    parser.add_argument('--oversamp-limit', type=int, default=126, help='maximum number of samples each age bin will be inflated to when oversampling (bins with more samples will be undersampled)')
 
     parser.add_argument('--lds', action='store_true', default=False, help='whether to enable LDS')
     parser.add_argument('--lds_kernel', type=str, default='gaussian',
@@ -72,10 +68,6 @@ def parse_options():
     ## For testing purposes only
     parser.add_argument('--cpu', action='store_true', help='use CPU instead of GPU')
     parser.add_argument('--eval', type=str, help='evaluate a pretrained model')
-    parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
-    parser.add_argument('--save-df', action='store_true', help='save full dataframe to results dir and exit')
-    parser.add_argument('--print-bin-counts', action='store_true', help='print age bin counts and exit')
-    parser.add_argument('--val-size', type=float, default=0.2, help='size of validation set used for training')
 
     args = parser.parse_args()
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
@@ -95,105 +87,6 @@ def parse_options():
         print(f"{arg}: {getattr(args, arg)}")
     print('='*20)
     return args
-
-def load_samples(split_fnames, bin_width=1, min_bin_count=10, max_samples=None):
-    def correct_path(path):
-        path = path.replace('/ABIDE/', '/ABIDE_I/')
-        path = path.replace('/NIH-PD/', '/NIH_PD/')
-        return path
-    
-    def get_ravens_path(path):
-        path = path.replace('reg', 'ravens')
-        return path
-    
-    def extract_dataset(path):
-        name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
-        return 'MGHBCH' if name in ('MGH', 'BCH') else name
-
-    schema = {'id': str, 'age': float, 'sex': str, 'path': str}
-    dfs = []
-    for fname in split_fnames:
-        split_num = int(fname[:-len('.list')].split('_')[-1])
-
-        df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
-        df['path'] = df['path'].apply(correct_path)
-        df['ravens_path'] = df['path'].apply(get_ravens_path)
-        df['agebin'] = df['age'] // bin_width
-        df['split'] = split_num
-        df['dataset'] = df['path'].apply(extract_dataset)
-        dfs.append(df)
-    
-    combined_df = pd.concat(dfs, axis=0)
-    
-    if max_samples is not None:
-        combined_df = combined_df.sample(max_samples)
-
-    if min_bin_count is not None:
-        bin_counts = combined_df['agebin'].value_counts()
-        bins_below_cutoff = [bin for bin in bin_counts.keys() if bin_counts[bin] < min_bin_count]
-        combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
-    
-    # Filter out files that don't exist
-    exists = combined_df['path'].apply(os.path.isfile)
-    missing_files = combined_df['path'][~exists]
-    print(f"{len(missing_files)} file(s) are missing:")
-    print('\n'.join(missing_files))
-    combined_df = combined_df[exists]
-    
-    return combined_df
-
-def resample(df, mode, undersamp_limit, oversamp_limit):
-    print("Resampling training data")
-
-    bins = sorted(set(df['agebin']))
-    bin_counts = {bin: sum(df['agebin'] == bin) for bin in bins}
-    bin_ratios = {bin: count / df.shape[0] for bin, count in bin_counts.items()}
-    print(f"Bin counts: {bin_counts}")
-
-    if mode == 'none':
-        pass
-    elif mode == 'over':
-        for bin in bins:
-            n_under = oversamp_limit - bin_counts[bin]
-            if n_under <= 0:
-                # Undersample when bin count is over the limit
-                new_samples = df[df['agebin'] == bin].sample(oversamp_limit, replace=False)
-                df = df[df['agebin'] != bin]
-                df = pd.concat([df, new_samples], axis=0)
-            else:
-                # Oversample as usual
-                new_samples = df[df['agebin'] == bin].sample(n_under, replace=True)
-                df = pd.concat([df, new_samples], axis=0)
-    elif mode == 'under':
-        for bin in bins:
-            n_over = bin_counts[bin] - undersamp_limit
-            if n_over <= 0:
-                # Oversample when bin count is under the limit
-                new_samples = df[df['agebin'] == bin].sample(-n_over, replace=True)
-                df = pd.concat([df, new_samples], axis=0)
-            else:
-                # Undersample as usual
-                new_samples = df[df['agebin'] == bin].sample(undersamp_limit, replace=False)
-                df = df[df['agebin'] != bin]
-                df = pd.concat([df, new_samples], axis=0)
-    elif mode == 'scale-up' or mode == 'scale-down':
-        if mode == 'scale-up':
-            target_count = oversamp_limit * len(bins)
-            replace = True
-        else:
-            target_count = undersamp_limit * len(bins)
-            replace = False
-
-        for bin in bins:
-            count = int(bin_ratios[bin] * target_count)
-            new_samples = df[df['agebin'] == bin].sample(count, replace=replace)
-            df = df[df['agebin'] != bin]
-            df = pd.concat([df, new_samples], axis=0)
-    else:
-        raise Exception(f"Invalid sampling mode: {mode}")
-
-    print(f"Number of images in final training dataset: {df.shape[0]}")
-    return df
 
 def setup_model(arch, device, checkpoint_file=None, fds=None):
     if arch == 'resnet18':
@@ -331,23 +224,10 @@ def main():
     split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
     assert len(split_fnames) == 5
 
-    if opts.save_df:
-        opts.min_bin_count = None
     df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
-    if opts.save_df:
-        df.to_csv(os.path.join(results_dir, "merged_df.csv"), index=False)
-        sys.exit(0)
 
     _train_df, val_df = train_test_split(df, test_size=opts.val_size, stratify=df['agebin'])
     train_df = resample(_train_df, mode=opts.sample, undersamp_limit=opts.undersamp_limit, oversamp_limit=opts.oversamp_limit)
-
-    if opts.print_bin_counts:
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-            print(df['agebin'].value_counts())
-            print(_train_df['agebin'].value_counts())
-            print(train_df['agebin'].value_counts())
-            print(val_df['agebin'].value_counts())
-        sys.exit(0)
 
     lds = {
         'kernel': opts.lds_kernel,
