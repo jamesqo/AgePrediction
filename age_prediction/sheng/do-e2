@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#SBATCH --partition=fnndsc-gpu
+#SBATCH --time=3-00:00
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:Titan_RTX:1
+#SBATCH --account=fnndsc
+#SBATCH --mem=24G
+
+# Tesla_T 0-2
+#Tesla_k 0-1
+
+module load anaconda3
+#source activate pytorch-gpu
+source activate james
+pip install --user -r requirements.txt
+python trainJames.py 
