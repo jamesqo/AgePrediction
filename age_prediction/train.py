@@ -27,7 +27,6 @@ from .vgg import VGG8
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 SPLITS_DIR = os.path.join(ROOT_DIR, "folderlist")
 START_TIME = datetime.now().strftime("%m/%d/%Y, %H:%M:%S")
-LOG_FILE = ''
 
 print = logging.info
 
@@ -44,6 +43,7 @@ def parse_options():
     parser.add_argument('--gamma', type=float, default=0.5, help='learning rate decay factor')
     parser.add_argument('--weight-decay', type=float, default=1e-6, help='weight decay')
 
+    parser.add_argument('--splits-dir', type=str, default='default', help='name of splits directory')
     parser.add_argument('--sample', type=str, choices=['none', 'over', 'under', 'scale-up', 'scale-down'], default='none', help='sampling strategy')
     parser.add_argument('--reweight', type=str, choices=['none', 'inv', 'sqrt_inv'], default='none', help='reweighting strategy')
 
@@ -73,7 +73,6 @@ def parse_options():
     assert (args.sample == 'none') or (args.reweight == 'none'), "--sample is incompatible with --reweight"
     assert (not args.from_checkpoint) or (args.n_epochs < 30), "Must specify --n-epochs alongside --from-checkpoint"
 
-    global LOG_FILE
     LOG_FILE = os.path.join(ROOT_DIR, "logs", f"{args.job_id}.log")
     try:
         os.remove(LOG_FILE)
@@ -192,8 +191,6 @@ def validate(model, arch, val_loader, device):
                 images = images.unsqueeze(1)
             age_preds = model(images)
             if glt:
-                # Delete the first (global) prediction, which is only used for training, and average the rest
-                del age_preds[0]
                 age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
             else:
                 age_preds = age_preds.view(-1)
@@ -221,13 +218,9 @@ def main():
 
     print("Setting up dataset")
 
-    split_fnames = glob.glob(f"{SPLITS_DIR}/nfold_imglist_all_nfold_*.list")
-    assert len(split_fnames) == 5
-
-    df = load_samples(split_fnames, opts.bin_width, opts.min_bin_count, opts.max_samples)
-
-    _train_df, val_df = train_test_split(df, test_size=opts.val_size, stratify=df['agebin'])
-    train_df = resample(_train_df, mode=opts.sample, undersamp_limit=opts.undersamp_limit, oversamp_limit=opts.oversamp_limit)
+    splits_dir = os.path.join(ROOT_DIR, "splits", opts.splits_dir)
+    train_df = pd.read_csv(os.path.join(splits_dir, "train" if opts.sample is None else f"train_{opts.sample}"))
+    val_df = pd.read_csv(os.path.join(splits_dir, "val"))
 
     lds = {
         'kernel': opts.lds_kernel,

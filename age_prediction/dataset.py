@@ -1,4 +1,3 @@
-import nibabel
 import numpy as np
 import pandas as pd
 from scipy.ndimage import convolve1d, zoom
@@ -37,9 +36,7 @@ class AgePredictionDataset(data.Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image = nibabel.load(row['path']).get_fdata()
-        image = image[54:184, 25:195, 12:132] # Crop out zeroes
-        image /= np.percentile(image, 95) # Normalize intensity
+        image = np.load(row['pkl_path'])
 
         if self.labeled:
             age = row['age']

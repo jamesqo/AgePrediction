@@ -313,4 +313,6 @@ class GlobalLocalBrainAge(nn.Module):
         if self.training and self.uses_fds:
             return outlist, encodings
         else:
+            if not self.training:
+                del outlist[0]
             return outlist

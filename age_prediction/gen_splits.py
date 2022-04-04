@@ -8,8 +8,13 @@ import re
 import os
 import glob
 
+import nibabel
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+FOLDS_DIR = os.path.join(ROOT_DIR, "folderlist")
 
 def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     """
@@ -26,20 +31,35 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     def extract_dataset(path):
         name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
         return 'MGHBCH' if name in ('MGH', 'BCH') else name
+    
+    def get_pkl_path(row):
+        img_path, dataset, id_ = row['img_path'], row['dataset'], row['id']
+        out_path = os.path.join(ROOT_DIR, "pickles", dataset, f"{id_}.npy")
+        if not os.path.isfile(out_path):
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-    schema = {'id': str, 'age': float, 'sex': str, 'path': str}
+            image = nibabel.load(img_path).get_fdata()
+            image = image[54:184, 25:195, 12:132] # Crop out zeroes
+            image /= np.percentile(image, 95) # Normalize intensity
+            np.save(out_path, image)
+        return out_path
+
+    schema = {'id': str, 'age': float, 'sex': str, 'img_path': str}
     dfs = []
     for fname in fold_fnames:
         fold_num = int(fname[:-len('.list')].split('_')[-1])
 
-        df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'path'], dtype=schema)
-        df['path'] = df['path'].apply(correct_path)
+        df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'img_path'], dtype=schema)
+        df['img_path'] = df['img_path'].apply(correct_path)
         df['agebin'] = df['age'] // 1
         df['fold'] = fold_num
-        df['dataset'] = df['path'].apply(extract_dataset)
+        df['dataset'] = df['img_path'].apply(extract_dataset)
+        df['pkl_path'] = df.apply(get_pkl_path, axis=1)
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
+    ids = combined_df['id']
+    assert len(ids) == len(set(ids)) # Patient
     
     if max_samples is not None:
         combined_df = combined_df.sample(max_samples, random_state=42)
@@ -50,8 +70,8 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
         combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
     
     # Filter out files that don't exist
-    exists = combined_df['path'].apply(os.path.isfile)
-    missing_files = combined_df['path'][~exists]
+    exists = combined_df['img_path'].apply(os.path.isfile)
+    missing_files = combined_df['img_path'][~exists]
     print(f"{len(missing_files)} file(s) are missing:")
     print('\n'.join(missing_files))
     combined_df = combined_df[exists]
@@ -116,8 +136,6 @@ def main():
     parser.add_argument('--max-samples', type=int, help='limit the number of samples used for training/validation')
     args = parser.parse_args()
 
-    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    FOLDS_DIR = os.path.join(ROOT_DIR, "folderlist")
     out_dir = os.path.join(ROOT_DIR, "splits", args.dirname)
     os.makedirs(out_dir, exist_ok=True)
 
