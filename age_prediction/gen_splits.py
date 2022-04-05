@@ -12,6 +12,7 @@ import nibabel
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 FOLDS_DIR = os.path.join(ROOT_DIR, "folderlist")
@@ -31,18 +32,6 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     def extract_dataset(path):
         name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
         return 'MGHBCH' if name in ('MGH', 'BCH') else name
-    
-    def get_pkl_path(row):
-        img_path, dataset, id_ = row['img_path'], row['dataset'], row['id']
-        out_path = os.path.join(ROOT_DIR, "pickles", dataset, f"{id_}.npy")
-        if not os.path.isfile(out_path):
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
-            image = nibabel.load(img_path).get_fdata()
-            image = image[54:184, 25:195, 12:132] # Crop out zeroes
-            image /= np.percentile(image, 95) # Normalize intensity
-            np.save(out_path, image)
-        return out_path
 
     schema = {'id': str, 'age': float, 'sex': str, 'img_path': str}
     dfs = []
@@ -54,7 +43,6 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
         df['agebin'] = df['age'] // 1
         df['fold'] = fold_num
         df['dataset'] = df['img_path'].apply(extract_dataset)
-        df['pkl_path'] = df.apply(get_pkl_path, axis=1)
         dfs.append(df)
     
     combined_df = pd.concat(dfs, axis=0)
@@ -75,6 +63,25 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     print(f"{len(missing_files)} file(s) are missing:")
     print('\n'.join(missing_files))
     combined_df = combined_df[exists]
+    
+    def get_pkl_path(row):
+        img_path, dataset, id_ = row['img_path'], row['dataset'], row['id']
+        pkl_path = os.path.join(ROOT_DIR, "pickles", dataset, f"{id_}.npy")
+        return pkl_path
+
+    combined_df['pkl_path'] = combined_df.apply(get_pkl_path, axis=1)
+    # Create pickle files for images that don't have one
+    to_pickle = combined_df[~combined_df['pkl_path'].apply(os.path.isfile)]
+    num_to_pickle = to_pickle.shape[0]
+    print(f"{num_to_pickle} file(s) need pickling")
+    for idx, row in tqdm(to_pickle.iterrows(), total=num_to_pickle):
+        img_path, out_path = row['img_path'], row['pkl_path']
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+        image = nibabel.load(img_path).get_fdata()
+        image = image[54:184, 25:195, 12:132] # Crop out zeroes
+        image /= np.percentile(image, 95) # Normalize intensity
+        np.save(out_path, image)
     
     return combined_df
 

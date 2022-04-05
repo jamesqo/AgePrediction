@@ -4,7 +4,13 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
+        {
+            "name": "Python: Attach using Process Id",
+            "type": "python",
+            "request": "attach",
+            "processId": "${command:pickProcess}",
+            "justMyCode": true
+        },
         {
             "name": "Train SFCN",
             "type": "python",
@@ -12,7 +18,16 @@
             "module": "age_prediction.train",
             "console": "integratedTerminal",
             "python": "/home/ch225092/.conda/envs/james/bin/python",
-            "args": ["sfcn", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu"]
+            "args": [
+                "sfcn",
+                "--job-id",
+                "__vscodetest__",
+                "--max-samples",
+                "500",
+                "--min-bin-count",
+                "2",
+                "--cpu"
+            ]
         },
         {
             "name": "Train FiANet",
@@ -21,7 +36,18 @@
             "module": "age_prediction.train",
             "console": "integratedTerminal",
             "python": "/home/ch225092/.conda/envs/james/bin/python",
-            "args": ["fianet", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu", "--batch-size", "1"]
+            "args": [
+                "fianet",
+                "--job-id",
+                "__vscodetest__",
+                "--max-samples",
+                "500",
+                "--min-bin-count",
+                "2",
+                "--cpu",
+                "--batch-size",
+                "1"
+            ]
         },
         {
             "name": "Train GLT",
@@ -30,7 +56,18 @@
             "module": "age_prediction.train",
             "console": "integratedTerminal",
             "python": "/home/ch225092/.conda/envs/james/bin/python",
-            "args": ["glt", "--job-id", "__vscodetest__", "--max-samples", "500", "--min-bin-count", "2", "--cpu", "--batch-size", "2"]
+            "args": [
+                "glt",
+                "--job-id",
+                "__vscodetest__",
+                "--max-samples",
+                "500",
+                "--min-bin-count",
+                "2",
+                "--cpu",
+                "--batch-size",
+                "2"
+            ]
         }
     ]
 }
