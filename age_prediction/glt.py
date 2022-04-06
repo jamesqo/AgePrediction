@@ -8,6 +8,8 @@ import torch.nn as nn
 
 import math
 
+from .fds import FDS
+
 class convBlock(nn.Module):
     def __init__(self,inplace,outplace,kernel_size=3,padding=1):
         super().__init__()
@@ -149,7 +151,8 @@ class GlobalLocalBrainAge(nn.Module):
                  nblock=6,
                  num_classes=1,
                  drop_rate=0.5,
-                 backbone='vgg8'):
+                 backbone='vgg8',
+                 fds=None):
         """
         Parameter:
             @patch_size: the patch size of the local pathway
@@ -194,16 +197,38 @@ class GlobalLocalBrainAge(nn.Module):
             
         self.gloout = nn.Linear(out_hidden_size,num_classes)
         self.locout = nn.Linear(out_hidden_size,num_classes)
+
+        self.uses_fds = fds
+        if fds:
+            self.fds = FDS(
+                feature_dim=out_hidden_size,
+                bucket_num=fds['bucket_num'],
+                bucket_start=fds['bucket_start'],
+                start_update=fds['start_update'],
+                start_smooth=fds['start_smooth'],
+                kernel=fds['kernel'],
+                ks=fds['ks'],
+                sigma=fds['sigma'],
+                momentum=fds['momentum']
+            )
+            self.start_smooth = fds['start_smooth']
         
-    def forward(self,xinput):
+    def forward(self,xinput,targets=None, epoch=None):
         _,_,H,W=xinput.size()
-        outlist = []
+        outlist = [] # (N_p, B, 1) where N_p == number of predictor models, B == batch size
+        encodings = [] # (N_p, B, out_hidden_size)
         
         xglo = self.global_feat(xinput)
         xgfeat = torch.flatten(self.avg(xglo),1)
+
+        # Apply FDS smoothing
+        xgfeat_s = xgfeat
+        if self.training and self.uses_fds and epoch >= self.start_smooth:
+            xgfeat_s = self.fds.smooth(xgfeat_s, targets, epoch)
             
-        glo = self.gloout(xgfeat)
+        glo = self.gloout(xgfeat_s)
         outlist=[glo]
+        encodings.append(xgfeat)
         
         B2,C2,H2,W2 = xglo.size()
         xglot = xglo.view(B2,C2,H2*W2)
@@ -231,9 +256,15 @@ class GlobalLocalBrainAge(nn.Module):
                     xloc = xloc + tmp
                     
                 xloc = torch.flatten(self.avg(xloc),1)
+
+                # Apply FDS smoothing
+                xloc_s = xloc
+                if self.training and self.uses_fds and epoch >= self.start_smooth:
+                    xloc_s = self.fds.smooth(xloc_s, targets, epoch)
                     
-                out = self.locout(xloc)
+                out = self.locout(xloc_s)
                 outlist.append(out)
+                encodings.append(xloc)
                 
                 sumout += out
                 numout += 1
@@ -242,6 +273,7 @@ class GlobalLocalBrainAge(nn.Module):
         
         if not self.training:
             return sumout
-                
-      
-        return outlist
+        elif self.uses_fds:
+            return outlist, encodings
+        else:
+            return outlist

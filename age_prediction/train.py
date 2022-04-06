@@ -97,9 +97,7 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1, fds=fds)
     elif arch == 'glt':
-        # TODO: add FDS support
-        model = GlobalLocalBrainAge(inplace=130, num_classes=1)
-        model.uses_fds = False
+        model = GlobalLocalBrainAge(inplace=130, num_classes=1, fds=fds)
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -146,8 +144,12 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             loss = weighted_l1_loss(age_preds, ages, weights)
         else:
             if model.uses_fds:
-                # TODO: add FDS support
-                raise NotImplementedError()
+                age_bins = torch.floor(ages)
+                age_preds_lst, batch_encodings_lst = model(images, targets=age_bins, epoch=epoch)
+
+                for batch_encodings in batch_encodings_lst:
+                    encodings.extend(batch_encodings.detach().cpu().numpy())
+                    targets.extend(age_bins.cpu().numpy())
             else:
                 age_preds_lst = model(images)
             loss = torch.sum(torch.stack(
