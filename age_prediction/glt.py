@@ -3,15 +3,12 @@ This is the code for global-local transformer for brain age estimation
 @email: heshengxgd@gmail.com
 """
 
-from .fds import FDS
-
 import torch
 import torch.nn as nn
 
-import copy
 import math
 
-class convBlockVGG(nn.Module):
+class convBlock(nn.Module):
     def __init__(self,inplace,outplace,kernel_size=3,padding=1):
         super().__init__()
         
@@ -35,17 +32,17 @@ class VGG8(nn.Module):
         
         self.maxp = nn.MaxPool2d(2)
         
-        self.conv11 = convBlockVGG(inplace,ly[0])
-        self.conv12 = convBlockVGG(ly[0],ly[0])
+        self.conv11 = convBlock(inplace,ly[0])
+        self.conv12 = convBlock(ly[0],ly[0])
         
-        self.conv21 = convBlockVGG(ly[0],ly[1])
-        self.conv22 = convBlockVGG(ly[1],ly[1])
+        self.conv21 = convBlock(ly[0],ly[1])
+        self.conv22 = convBlock(ly[1],ly[1])
         
-        self.conv31 = convBlockVGG(ly[1],ly[2])
-        self.conv32 = convBlockVGG(ly[2],ly[2])
+        self.conv31 = convBlock(ly[1],ly[2])
+        self.conv32 = convBlock(ly[2],ly[2])
         
-        self.conv41 = convBlockVGG(ly[2],ly[3])
-        self.conv42 = convBlockVGG(ly[3],ly[3])
+        self.conv41 = convBlock(ly[2],ly[3])
+        self.conv42 = convBlock(ly[3],ly[3])
         
     def forward(self,x):
 
@@ -67,59 +64,6 @@ class VGG8(nn.Module):
 
         return x
 
-class VGG16(nn.Module):
-    def __init__(self,inplace):
-        super().__init__()
-        
-        ly = [64,128,256,512,512]
-        
-        self.ly = ly
-        
-        self.maxp = nn.MaxPool2d(2)
-        
-        self.conv11 = convBlockVGG(inplace,ly[0])
-        self.conv12 = convBlockVGG(ly[0],ly[0])
-        
-        self.conv21 = convBlockVGG(ly[0],ly[1])
-        self.conv22 = convBlockVGG(ly[1],ly[1])
-        
-        self.conv31 = convBlockVGG(ly[1],ly[2])
-        self.conv32 = convBlockVGG(ly[2],ly[2])
-        self.conv33 = convBlockVGG(ly[2],ly[2])
-        
-        self.conv41 = convBlockVGG(ly[2],ly[3])
-        self.conv42 = convBlockVGG(ly[3],ly[3])
-        self.conv43 = convBlockVGG(ly[3],ly[3])
-        
-        self.conv51 = convBlockVGG(ly[3],ly[3])
-        self.conv52 = convBlockVGG(ly[3],ly[3])
-        self.conv53 = convBlockVGG(ly[3],ly[3])
-        
-    def forward(self,x):
-
-        x = self.conv11(x)
-        x = self.conv12(x)
-        x = self.maxp(x)
- 
-        x = self.conv21(x)
-        x = self.conv22(x)
-        x = self.maxp(x)
-
-        x = self.conv31(x)
-        x = self.conv32(x)
-        x = self.conv33(x)
-        x = self.maxp(x)
-
-        x = self.conv41(x)
-        x = self.conv42(x)
-        x = self.conv43(x)
-        x = self.maxp(x)
-        
-        x = self.conv51(x)
-        x = self.conv52(x)
-        x = self.conv53(x)
-
-        return x    
 
 class GlobalAttention(nn.Module):
     def __init__(self, 
@@ -171,7 +115,7 @@ class GlobalAttention(nn.Module):
         attention_output = self.proj_dropout(attention_output)
         
         return attention_output
-
+'''
 class convBlock(nn.Module):
     def __init__(self,inplace,outplace,kernel_size=3,padding=1):
         super().__init__()
@@ -185,6 +129,7 @@ class convBlock(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         return x
+'''
     
 class Feedforward(nn.Module):
     def __init__(self,inplace,outplace):
@@ -202,9 +147,9 @@ class GlobalLocalBrainAge(nn.Module):
                  patch_size=64,
                  step=-1,
                  nblock=6,
+                 num_classes=1,
                  drop_rate=0.5,
-                 backbone='vgg8',
-                 fds=None):
+                 backbone='vgg8'):
         """
         Parameter:
             @patch_size: the patch size of the local pathway
@@ -227,10 +172,6 @@ class GlobalLocalBrainAge(nn.Module):
             self.global_feat = VGG8(inplace)
             self.local_feat = VGG8(inplace)
             hidden_size = 512
-        elif backbone == 'vgg16':
-            self.global_feat = VGG16(inplace)
-            self.local_feat = VGG16(inplace)
-            hidden_size = 512
         else:
             raise ValueError('% model does not supported!'%backbone)
     
@@ -251,36 +192,25 @@ class GlobalLocalBrainAge(nn.Module):
         self.avg = nn.AdaptiveAvgPool2d(1)
         out_hidden_size = hidden_size
             
-        self.gloout = nn.Linear(out_hidden_size,1)
-        self.locout = nn.Linear(out_hidden_size,1)
-
-        self.uses_fds = fds
-        if fds:
-            self.fds = FDS(
-                feature_dim=out_hidden_size, bucket_num=fds['bucket_num'], bucket_start=fds['bucket_start'],
-                start_update=fds['start_update'], start_smooth=fds['start_smooth'], kernel=fds['kernel'], ks=fds['ks'], sigma=fds['sigma'], momentum=fds['momentum']
-            )
-            self.start_smooth = fds['start_smooth']
+        self.gloout = nn.Linear(out_hidden_size,num_classes)
+        self.locout = nn.Linear(out_hidden_size,num_classes)
         
-    def forward(self,xinput, targets=None, epoch=None):
+    def forward(self,xinput):
         _,_,H,W=xinput.size()
-        outlist = [] # (N_p, B, 1) where N_p == number of predictors, B == batch size
-        encodings = [] # (N_p, B, out_hidden_size)
+        outlist = []
         
         xglo = self.global_feat(xinput)
         xgfeat = torch.flatten(self.avg(xglo),1)
-
-        xgfeat_s = xgfeat
-        if self.training and self.uses_fds and epoch >= self.start_smooth:
-            xgfeat_s = self.fds.smooth(xgfeat_s, targets, epoch)
-
-        glo = self.gloout(xgfeat_s)
+            
+        glo = self.gloout(xgfeat)
         outlist=[glo]
-        encodings.append(xgfeat)
         
         B2,C2,H2,W2 = xglo.size()
         xglot = xglo.view(B2,C2,H2*W2)
         xglot = xglot.permute(0,2,1)
+        
+        sumout = 0
+        numout = 0
         
         for y in range(0,H-self.patch_size,self.step):
             for x in range(0,W-self.patch_size,self.step):
@@ -301,18 +231,17 @@ class GlobalLocalBrainAge(nn.Module):
                     xloc = xloc + tmp
                     
                 xloc = torch.flatten(self.avg(xloc),1)
-
-                xloc_s = xloc
-                if self.training and self.uses_fds and epoch >= self.start_smooth:
-                    xloc_s = self.fds.smooth(xloc_s, targets, epoch)
                     
-                out = self.locout(xloc_s)
+                out = self.locout(xloc)
                 outlist.append(out)
-                encodings.append(xloc)
+                
+                sumout += out
+                numout += 1
+        
+        sumout = sumout / numout
+        
+        if not self.training:
+            return sumout
+                
       
-        if self.training and self.uses_fds:
-            return outlist, encodings
-        else:
-            if not self.training:
-                del outlist[0]
-            return outlist
+        return outlist

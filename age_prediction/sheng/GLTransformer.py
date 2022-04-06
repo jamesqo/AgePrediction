@@ -245,19 +245,3 @@ class GlobalLocalBrainAge(nn.Module):
                 
       
         return outlist
-    
-if __name__ == '__main__':
-    x1 = torch.rand(1,5,130,170)
-    
-    mod = GlobalLocalBrainAge(5,
-                        patch_size=64,
-                        step=32,
-                        nblock=6,
-                        backbone='vgg8')
-    
-    mod.eval()
-    
-    zlist = mod(x1)
-    for z in zlist:
-        print(z.shape)
-    print('number is:',len(zlist))

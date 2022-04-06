@@ -82,7 +82,6 @@ class MRIage:
         if not os.path.exists(self.subjectlogdir):
             os.mkdir(self.subjectlogdir)
         
-        folder='/neuro/labs/grantlab/research/MRI_Predict_Age/PythonCode/Extract2DSlice/TripleSet/data2dslice/'
         self.model_dir = 'save_models'
         if not os.path.exists(self.model_dir):
             os.mkdir(self.model_dir)

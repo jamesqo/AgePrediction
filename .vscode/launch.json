@@ -22,10 +22,6 @@
                 "sfcn",
                 "--job-id",
                 "__vscodetest__",
-                "--max-samples",
-                "500",
-                "--min-bin-count",
-                "2",
                 "--cpu"
             ]
         },
@@ -40,13 +36,7 @@
                 "fianet",
                 "--job-id",
                 "__vscodetest__",
-                "--max-samples",
-                "500",
-                "--min-bin-count",
-                "2",
-                "--cpu",
-                "--batch-size",
-                "1"
+                "--cpu"
             ]
         },
         {
@@ -60,13 +50,15 @@
                 "glt",
                 "--job-id",
                 "__vscodetest__",
-                "--max-samples",
-                "500",
-                "--min-bin-count",
-                "2",
                 "--cpu",
+                "--initial-lr",
+                "0.0001",
                 "--batch-size",
-                "2"
+                "16",
+                "--step-size",
+                "25",
+                "--gamma",
+                "0.5"
             ]
         }
     ]

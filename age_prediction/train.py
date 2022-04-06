@@ -97,7 +97,9 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
     elif arch == 'sfcn':
         model = SFCN(in_channels=1, num_classes=1, fds=fds)
     elif arch == 'glt':
-        model = GlobalLocalBrainAge(inplace=130, fds=fds)
+        # TODO: add FDS support
+        model = GlobalLocalBrainAge(inplace=130, num_classes=1)
+        model.uses_fds = False
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -144,12 +146,8 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             loss = weighted_l1_loss(age_preds, ages, weights)
         else:
             if model.uses_fds:
-                age_bins = torch.floor(ages)
-                age_preds_lst, batch_encodings_lst = model(images, targets=age_bins, epoch=epoch)
-
-                for batch_encodings in batch_encodings_lst:
-                    encodings.extend(batch_encodings.detach().cpu().numpy())
-                    targets.extend(age_bins.cpu().numpy())
+                # TODO: add FDS support
+                raise NotImplementedError()
             else:
                 age_preds_lst = model(images)
             loss = torch.sum(torch.stack(
@@ -189,11 +187,7 @@ def validate(model, arch, val_loader, device):
             images, ages = images.to(device), ages.to(device)
             if is_3d:
                 images = images.unsqueeze(1)
-            age_preds = model(images)
-            if glt:
-                age_preds = torch.mean(torch.stack(age_preds).squeeze(2), dim=0)
-            else:
-                age_preds = age_preds.view(-1)
+            age_preds = model(images).view(-1)
             loss = F.l1_loss(age_preds, ages, reduction='mean')
 
             losses.append(loss.item())
@@ -219,7 +213,7 @@ def main():
     print("Setting up dataset")
 
     splits_dir = os.path.join(ROOT_DIR, "splits", opts.splits_dir)
-    train_df = pd.read_csv(os.path.join(splits_dir, "train" if opts.sample is None else f"train_{opts.sample}"))
+    train_df = pd.read_csv(os.path.join(splits_dir, "train" if opts.sample == 'none' else f"train_{opts.sample}"))
     val_df = pd.read_csv(os.path.join(splits_dir, "val"))
 
     lds = {
