@@ -22,21 +22,9 @@
                 "sfcn",
                 "--job-id",
                 "__vscodetest__",
-                "--cpu"
-            ]
-        },
-        {
-            "name": "Train FiANet",
-            "type": "python",
-            "request": "launch",
-            "module": "age_prediction.train",
-            "console": "integratedTerminal",
-            "python": "/home/ch225092/.conda/envs/james/bin/python",
-            "args": [
-                "fianet",
-                "--job-id",
-                "__vscodetest__",
-                "--cpu"
+                "--cpu",
+                "--splits-dir",
+                "debug"
             ]
         },
         {
@@ -51,10 +39,12 @@
                 "--job-id",
                 "__vscodetest__",
                 "--cpu",
+                "--splits-dir",
+                "debug",
                 "--initial-lr",
                 "0.0001",
                 "--batch-size",
-                "16",
+                "2",
                 "--step-size",
                 "25",
                 "--gamma",

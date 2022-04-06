@@ -175,15 +175,9 @@ def validate(model, arch, val_loader, device):
     all_preds = []
     
     is_3d = (arch == 'sfcn')
-    glt = (arch == 'glt')
 
     with torch.no_grad():
         for (images, ages, _) in val_loader:
-            # When batch_size=1 DataLoader doesn't convert the data to Tensors
-            if not torch.is_tensor(images):
-                images = torch.tensor(images).unsqueeze(0)
-            if not torch.is_tensor(ages):
-                ages = torch.tensor(ages).unsqueeze(0)
             images, ages = images.to(device), ages.to(device)
             if is_3d:
                 images = images.unsqueeze(1)
@@ -225,7 +219,7 @@ def main():
     val_dataset = AgePredictionDataset(val_df)
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
-    val_loader = data.DataLoader(val_dataset, batch_size=1)
+    val_loader = data.DataLoader(val_dataset, batch_size=opts.batch_size)
     
     ## Dump configuration info to a JSON file
     
