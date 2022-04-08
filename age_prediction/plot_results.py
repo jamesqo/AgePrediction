@@ -52,6 +52,7 @@ def load_results():
         results['config'] = cfg
         all_results[job_desc] = results
 
+        '''
         # FDS feature results
         if os.path.exists(f"{RESULTS_DIR}/{job_id}/train_df.csv"):
             results['train_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_df.csv")
@@ -59,6 +60,7 @@ def load_results():
             results['train_features_after_smoothing'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_features_after_smoothing.csv")
             results['val_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_df.csv")
             results['val_features'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_features.csv")
+        '''
     
     return all_results
 
@@ -89,7 +91,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8", 'sfcn': "SFCN"}[arch]
+    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8", 'sfcn': "SFCN", 'glt': "GLT"}[arch]
     ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
     ax.set_ylabel("MAE")
@@ -106,6 +108,8 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     job_descs.insert(0, ('baseline', "Baseline", '#888888', '-'))
     for i, (desc, label, color, style) in enumerate(job_descs):
         key = f"{desc} ({arch})"
+        if key not in all_results:
+            continue
         df = all_results[key]['val_preds']
 
         overall_mae = np.mean(np.abs(df['age'] - df['age_pred']))
@@ -152,7 +156,7 @@ def main():
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
     
     ## Plot validation losses per bin
-    for arch in ('resnet18', 'vgg8', 'sfcn'):
+    for arch in ('resnet18', 'vgg8', 'sfcn', 'glt'):
         plot_val_losses(all_results, arch,
             [
                 ('under', "Undersampling", 'red', '-'),
@@ -217,6 +221,7 @@ def main():
         plt.savefig(os.path.join(FIGURES_DIR, f"bin_counts_{dataset}.png"))
         plt.clf()
 
+    '''
     ## Plot the mean of each feature dim for FDS jobs
     for results in all_results.values():
         job_id = results['config']['job_id']
@@ -247,6 +252,7 @@ def main():
                 plt.ylabel("Mean value")
                 plt.savefig(os.path.join(FIGURES_DIR, f"mean_vals_{colname}_{job_id}.png"))
                 plt.clf()
+    '''
 
     print("Done")
 

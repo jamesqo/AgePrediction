@@ -40,3 +40,17 @@ sfcn:
 	lds+sqrt_inv: 1242585
 	fds+sqrt_inv: 1523384
 	lds+fds+sqrt_inv: 1523385
+glt:
+	baseline: 1982377
+	over: 1983542
+	scale-up: 1983544
+	under: 1983545
+	scale-down: 1983546
+	inv: 1982378
+	lds+inv: 1984204
+	fds+inv: 1984205
+	lds+fds+inv: 1984206
+	sqrt_inv: 1982379
+	lds+sqrt_inv: 1984207
+	fds+sqrt_inv: 1984208
+	lds+fds+sqrt_inv: 1984209
