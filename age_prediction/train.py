@@ -20,6 +20,7 @@ from torch.utils import data
 
 from .dataset import AgePredictionDataset
 from .glt import GlobalLocalBrainAge
+from .RelationNet import CompaireLearning
 from .resnet import resnet18
 from .sfcn import SFCN
 from .vgg import VGG8
@@ -33,7 +34,7 @@ print = logging.info
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt', 'relnet'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -98,6 +99,9 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
         model = SFCN(in_channels=1, num_classes=1, fds=fds)
     elif arch == 'glt':
         model = GlobalLocalBrainAge(inplace=130, num_classes=1, fds=fds)
+    elif arch == 'relnet':
+        model = CompaireLearning(in_dim=1)
+        model.uses_fds = False
     else:
         raise Exception(f"Invalid arch: {arch}")
     model.double()
@@ -123,8 +127,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
     encodings = []
     targets = []
 
-    is_3d = (arch == 'sfcn')
-    glt = (arch == 'glt')
+    is_3d = (arch == 'sfcn' or arch == 'relnet')
 
     for batch_idx, (images, ages, weights) in enumerate(train_loader):
         images, ages, weights = images.to(device), ages.to(device), weights.to(device)
@@ -133,16 +136,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
 
         optimizer.zero_grad()
 
-        if not glt:
-            if model.uses_fds:
-                age_bins = torch.floor(ages)
-                age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
-                encodings.extend(batch_encodings.detach().cpu().numpy())
-                targets.extend(age_bins.cpu().numpy())
-            else:
-                age_preds = model(images)
-            loss = weighted_l1_loss(age_preds, ages, weights)
-        else:
+        if arch == 'glt':
             if model.uses_fds:
                 age_bins = torch.floor(ages)
                 age_preds_lst, batch_encodings_lst = model(images, targets=age_bins, epoch=epoch)
@@ -155,6 +149,34 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             loss = torch.sum(torch.stack(
                 [weighted_l1_loss(age_preds, ages, weights) for age_preds in age_preds_lst]
             ))
+        elif arch == 'relnet':
+            im1, im2 = torch.chunk(images, 2, dim=0)
+            a1, a2 = torch.chunk(ages, 2, dim=0)
+            w1, w2 = torch.chunk(weights, 2, dim=0)
+
+            outlist = model(im1, im2)
+            loss = 0.
+
+            true_sum = a1 + a2
+            loss += weighted_l1_loss(outlist[0].squeeze(1), true_sum, (w1 + w2)/2)
+
+            true_diff = a1 - a2
+            loss += weighted_l1_loss(outlist[1].squeeze(1), true_diff, (w1 + w2)/2)
+
+            true_max = torch.max(a1, a2)
+            loss += weighted_l1_loss(outlist[2].squeeze(1), true_max, (w1 + w2)/2)
+
+            true_min = torch.min(a1, a2)
+            loss += weighted_l1_loss(outlist[3].squeeze(1), true_min, (w1 + w2)/2)
+        else:
+            if model.uses_fds:
+                age_bins = torch.floor(ages)
+                age_preds, batch_encodings = model(images, targets=age_bins, epoch=epoch)
+                encodings.extend(batch_encodings.detach().cpu().numpy())
+                targets.extend(age_bins.cpu().numpy())
+            else:
+                age_preds = model(images)
+            loss = weighted_l1_loss(age_preds, ages, weights)
 
         loss.backward()
         optimizer.step()
@@ -171,25 +193,54 @@ def train(model, arch, optimizer, train_loader, device, epoch):
     return np.mean(losses)
 
 def validate(model, arch, val_loader, device):
+    def stack2np(tensor):
+        return torch.stack(tensor).cpu().numpy()
+
     model.eval()
 
     losses = []
-    all_preds = []
+
+    if arch == 'relnet':
+        sum_preds = []
+        max_preds = []
+        min_preds = []
+    else:
+        all_preds = []
     
-    is_3d = (arch == 'sfcn')
+    is_3d = (arch == 'sfcn' or arch == 'relnet')
 
     with torch.no_grad():
         for (images, ages, _) in val_loader:
             images, ages = images.to(device), ages.to(device)
             if is_3d:
                 images = images.unsqueeze(1)
-            age_preds = model(images).view(-1)
-            loss = F.l1_loss(age_preds, ages, reduction='mean')
-
-            losses.append(loss.item())
-            all_preds.extend(age_preds)
+            
+            if arch == 'relnet':
+                outlist = model(images, images)
+                pred_sum, pred_max, pred_min = outlist[0], outlist[2], outlist[3]
+                
+                sum_loss = F.l1_loss(pred_sum / 2, ages, reduction='mean')
+                max_loss = F.l1_loss(pred_max, ages, reduction='mean')
+                min_loss = F.l1_loss(pred_min, ages, reduction='mean')
+                loss = (sum_loss + max_loss + min_loss) / 3
+                losses.append(loss.item())
+                sum_preds.extend((pred_sum / 2).view(-1))
+                max_preds.extend(pred_max.view(-1))
+                min_preds.extend(pred_min.view(-1))
+            else:
+                age_preds = model(images).view(-1)
+                loss = F.l1_loss(age_preds, ages, reduction='mean')
+                losses.append(loss.item())
+                all_preds.extend(age_preds)
     
-    return np.mean(losses), torch.stack(all_preds).cpu().numpy()
+    if arch == 'relnet':
+        return np.mean(losses), {
+            'sum': stack2np(sum_preds),
+            'max': stack2np(max_preds),
+            'min': stack2np(min_preds)
+        }
+    
+    return np.mean(losses), stack2np(all_preds)
 
 def main():
     random.seed(0)
@@ -300,7 +351,12 @@ def main():
         np.savetxt(f"{results_dir}/val_losses_over_time.txt", val_losses)
 
     val_df_with_preds = val_df.copy()
-    val_df_with_preds['age_pred'] = best_val_preds
+    if opts.arch == 'relnet':
+        val_df_with_preds['age_pred_sum'] = best_val_preds['sum']
+        val_df_with_preds['age_pred_max'] = best_val_preds['max']
+        val_df_with_preds['age_pred_min'] = best_val_preds['min']
+    else:
+        val_df_with_preds['age_pred'] = best_val_preds
     val_df_with_preds.to_csv(f"{results_dir}/best_model_val_preds.csv", index=False)
 
 if __name__ == '__main__':

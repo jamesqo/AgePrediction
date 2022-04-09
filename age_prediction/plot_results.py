@@ -84,10 +84,19 @@ def plot_losses_over_time(results, fname):
     plt.close(fig)
 
 def plot_val_losses(all_results, arch, job_descs, fname):
+    if arch == 'relnet-sum':
+        pred_key = 'age_pred_sum'
+    elif arch == 'relnet-max':
+        pred_key = 'age_pred_max'
+    elif arch == 'relnet-min':
+        pred_key = 'age_pred_min'
+    else:
+        pred_key = 'age_pred'
+
     def mae(bin, df):
         subjects_in_bin = df[(df['age'] // 5) == bin]
         assert len(subjects_in_bin) > 0
-        return np.mean(np.abs(subjects_in_bin['age'] - subjects_in_bin['age_pred']))
+        return np.mean(np.abs(subjects_in_bin['age'] - subjects_in_bin[pred_key]))
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
@@ -112,7 +121,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
             continue
         df = all_results[key]['val_preds']
 
-        overall_mae = np.mean(np.abs(df['age'] - df['age_pred']))
+        overall_mae = np.mean(np.abs(df['age'] - df[pred_key]))
         print(f"Overall MAE for {key}: {overall_mae:.3f}")
 
         losses_per_bin = np.array([mae(bin, df) for bin in bins])
@@ -156,7 +165,7 @@ def main():
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
     
     ## Plot validation losses per bin
-    for arch in ('resnet18', 'vgg8', 'sfcn', 'glt'):
+    for arch in ('resnet18', 'vgg8', 'sfcn', 'glt', 'relnet-sum', 'relnet-max', 'relnet-min'):
         plot_val_losses(all_results, arch,
             [
                 ('under', "Undersampling", 'red', '-'),

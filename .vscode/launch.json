@@ -50,6 +50,24 @@
                 "--gamma",
                 "0.5"
             ]
+        },
+        {
+            "name": "Train RelationNet",
+            "type": "python",
+            "request": "launch",
+            "module": "age_prediction.train",
+            "console": "integratedTerminal",
+            "python": "/home/ch225092/.conda/envs/james/bin/python",
+            "args": [
+                "relnet",
+                "--job-id",
+                "__vscodetest__",
+                "--cpu",
+                "--splits-dir",
+                "debug",
+                "--batch-size",
+                "16"
+            ]
         }
     ]
 }
