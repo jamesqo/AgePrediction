@@ -8,11 +8,9 @@ import re
 import os
 import glob
 
-import nibabel
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from tqdm import tqdm
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 FOLDS_DIR = os.path.join(ROOT_DIR, "folderlist")
@@ -71,25 +69,6 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     print(f"{len(all_missing_files)} file(s) are missing:")
     print('\n'.join(all_missing_files))
     combined_df = combined_df[exists & ravens_exists]
-    
-    def get_pkl_path(row):
-        img_path, dataset, id_ = row['img_path'], row['dataset'], row['id']
-        pkl_path = os.path.join(ROOT_DIR, "pickles", dataset, f"{id_}.npy")
-        return pkl_path
-
-    combined_df['pkl_path'] = combined_df.apply(get_pkl_path, axis=1)
-    # Create pickle files for images that don't have one
-    to_pickle = combined_df[~combined_df['pkl_path'].apply(os.path.isfile)]
-    num_to_pickle = to_pickle.shape[0]
-    print(f"{num_to_pickle} file(s) need pickling")
-    for idx, row in tqdm(to_pickle.iterrows(), total=num_to_pickle):
-        img_path, out_path = row['img_path'], row['pkl_path']
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-
-        image = nibabel.load(img_path).get_fdata()
-        image = image[54:184, 25:195, 12:132] # Crop out zeroes
-        image /= np.percentile(image, 95) # Normalize intensity
-        np.save(out_path, image)
     
     return combined_df
 
