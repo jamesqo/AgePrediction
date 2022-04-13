@@ -363,20 +363,3 @@ class CompaireLearning(nn.Module):
         logitslist.append(self.min(queryfeat[:,3]))
         
         return logitslist
-
-if __name__ == '__main__':
-    
-    x = torch.rand(2,1,80,128,160)
-    
-    mod = CompaireLearning(
-                 in_dim=1,
-                 num_classes=1,
-                 total_blocks=2,
-                 drop_rate=0,
-                 dim='3d',
-                 firstPool=True,
-                 shareBackone=True)
-    
-    outlist = mod(x,x)
-    for o in outlist:
-        print(o.shape)

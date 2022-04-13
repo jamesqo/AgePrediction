@@ -217,13 +217,3 @@ class fusNet(nn.Module):
 			return [f1,f2,f3]
 		else:
 			return [f3]
-
-	
-
-if __name__ == '__main__':
-	x = torch.rand(1,80,128,160)
-	y = torch.rand(1,5,64,64)
-	mod = fusNet(inplace=80)
-	f = mod(x,x)
-	for i in f:
-		print(i.shape)

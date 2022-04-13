@@ -68,6 +68,24 @@
                 "--batch-size",
                 "16"
             ]
+        },
+        {
+            "name": "Train FiANet",
+            "type": "python",
+            "request": "launch",
+            "module": "age_prediction.train",
+            "console": "integratedTerminal",
+            "python": "/home/ch225092/.conda/envs/james/bin/python",
+            "args": [
+                "fianet",
+                "--job-id",
+                "__vscodetest__",
+                "--cpu",
+                "--splits-dir",
+                "debug",
+                "--batch-size",
+                "1"
+            ]
         }
     ]
 }

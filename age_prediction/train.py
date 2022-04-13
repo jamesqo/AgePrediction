@@ -19,6 +19,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils import data
 
 from .dataset import AgePredictionDataset
+from .FiANet3D import fusNet
 from .glt import GlobalLocalBrainAge
 from .RelationNet import CompaireLearning
 from .resnet import resnet18
@@ -34,7 +35,7 @@ print = logging.info
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt', 'relnet'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt', 'relnet', 'fianet'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -102,9 +103,14 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
     elif arch == 'relnet':
         model = CompaireLearning(in_dim=1)
         model.uses_fds = False
+    elif arch == 'fianet':
+        # TODO: add FDS support
+        model = fusNet(inplace=1, num_classes=1)
+        model.uses_fds = False
     else:
         raise Exception(f"Invalid arch: {arch}")
-    model.double()
+    if arch != 'fianet':
+        model.double()
     model.to(device)
     
     if checkpoint_file:
@@ -127,12 +133,19 @@ def train(model, arch, optimizer, train_loader, device, epoch):
     encodings = []
     targets = []
 
-    is_3d = (arch == 'sfcn' or arch == 'relnet')
+    is_3d = arch in ('sfcn', 'relnet', 'fianet')
 
-    for batch_idx, (images, ages, weights) in enumerate(train_loader):
-        images, ages, weights = images.to(device), ages.to(device), weights.to(device)
+    for batch_idx, inst in enumerate(train_loader):
+        if arch == 'fianet':
+            images, ravens_images, ages, weights = inst
+            images, ravens_images, ages, weights = images.to(device), ravens_images.to(device), ages.to(device), weights.to(device)
+        else:
+            images, ages, weights = inst
+            images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         if is_3d:
             images = images.unsqueeze(1)
+        if arch == 'fianet':
+            ravens_images = ravens_images.unsqueeze(1)
 
         optimizer.zero_grad()
 
@@ -150,6 +163,11 @@ def train(model, arch, optimizer, train_loader, device, epoch):
                 [weighted_l1_loss(age_preds, ages, weights) for age_preds in age_preds_lst]
             ))
         elif arch == 'relnet':
+            batch_len = images.shape[0]
+            if batch_len % 2 != 0:
+                print(f"Batch {batch_idx} has odd size of {batch_len}, skipping")
+                continue
+
             im1, im2 = torch.chunk(images, 2, dim=0)
             a1, a2 = torch.chunk(ages, 2, dim=0)
             w1, w2 = torch.chunk(weights, 2, dim=0)
@@ -168,6 +186,15 @@ def train(model, arch, optimizer, train_loader, device, epoch):
 
             true_min = torch.min(a1, a2)
             loss += weighted_l1_loss(outlist[3].squeeze(1), true_min, (w1 + w2)/2)
+        elif arch == 'fianet':
+            if model.uses_fds:
+                # TODO: add FDS support
+                pass
+            else:
+                age_preds_1, age_preds_2, age_preds_combined = model(images, ravens_images)
+            loss = weighted_l1_loss(age_preds_1, ages, weights)
+            loss += weighted_l1_loss(age_preds_2, ages, weights)
+            loss += weighted_l1_loss(age_preds_combined, ages, weights)
         else:
             if model.uses_fds:
                 age_bins = torch.floor(ages)
@@ -268,8 +295,8 @@ def main():
         'ks': opts.lds_ks,
         'sigma': opts.lds_sigma
     } if opts.lds else None
-    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=lds)
-    val_dataset = AgePredictionDataset(val_df)
+    train_dataset = AgePredictionDataset(train_df, reweight=opts.reweight, lds=lds, fianet=(opts.arch == 'fianet'))
+    val_dataset = AgePredictionDataset(val_df, fianet=(opts.arch == 'fianet'))
 
     train_loader = data.DataLoader(train_dataset, batch_size=opts.batch_size, shuffle=True)
     val_loader = data.DataLoader(val_dataset, batch_size=opts.batch_size)

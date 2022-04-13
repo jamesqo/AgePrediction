@@ -29,6 +29,10 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
         path = path.replace('/NIH-PD/', '/NIH_PD/')
         return path
     
+    def get_ravens_path(path):
+        path = path.replace('reg', 'ravens')
+        return path
+    
     def extract_dataset(path):
         name = re.match(r'/neuro/labs/grantlab/research/MRI_Predict_Age/([^/]*)', path)[1]
         return 'MGHBCH' if name in ('MGH', 'BCH') else name
@@ -40,6 +44,7 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
 
         df = pd.read_csv(fname, sep=' ', header=None, names=['id', 'age', 'sex', 'img_path'], dtype=schema)
         df['img_path'] = df['img_path'].apply(correct_path)
+        df['ravens_path'] = df['img_path'].apply(get_ravens_path)
         df['agebin'] = df['age'] // 1
         df['fold'] = fold_num
         df['dataset'] = df['img_path'].apply(extract_dataset)
@@ -59,10 +64,13 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     
     # Filter out files that don't exist
     exists = combined_df['img_path'].apply(os.path.isfile)
+    ravens_exists = combined_df['ravens_path'].apply(os.path.isfile)
     missing_files = combined_df['img_path'][~exists]
-    print(f"{len(missing_files)} file(s) are missing:")
-    print('\n'.join(missing_files))
-    combined_df = combined_df[exists]
+    missing_ravens_files = combined_df['ravens_path'][~ravens_exists]
+    all_missing_files = pd.concat([missing_files, missing_ravens_files])
+    print(f"{len(all_missing_files)} file(s) are missing:")
+    print('\n'.join(all_missing_files))
+    combined_df = combined_df[exists & ravens_exists]
     
     def get_pkl_path(row):
         img_path, dataset, id_ = row['img_path'], row['dataset'], row['id']
