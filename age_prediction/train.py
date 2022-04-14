@@ -234,23 +234,30 @@ def validate(model, arch, val_loader, device):
     else:
         all_preds = []
     
-    is_3d = (arch == 'sfcn' or arch == 'relnet')
+    is_3d = arch in ('sfcn', 'relnet', 'fianet')
 
     with torch.no_grad():
         for (images, ages, _) in val_loader:
             images, ages = images.to(device), ages.to(device)
             if is_3d:
-                images = images.unsqueeze(1)
+                images = images.unsqueeze(1) # Add a dimension for the number of channels
             
             if arch == 'relnet':
                 outlist = model(images, images)
-                pred_sum, pred_max, pred_min = outlist[0], outlist[2], outlist[3]
-                
+                pred_sum, pred_max, pred_min = outlist[0].squeeze(1), outlist[2].squeeze(1), outlist[3].squeeze(1)
+
                 sum_loss = F.l1_loss(pred_sum / 2, ages, reduction='mean')
                 max_loss = F.l1_loss(pred_max, ages, reduction='mean')
                 min_loss = F.l1_loss(pred_min, ages, reduction='mean')
                 loss = (sum_loss + max_loss + min_loss) / 3
                 losses.append(loss.item())
+
+                '''
+                for i in range(ages.size()[0]):
+                    print(f"gt {ages[i].item()} sum {pred_sum[i].item()} max {pred_max[i].item()} min {pred_min[i].item()}")
+                print(f"losses: sum {sum_loss.item()} max {max_loss.item()} min {min_loss.item()} total {loss.item()}")
+                '''
+
                 sum_preds.extend((pred_sum / 2).view(-1))
                 max_preds.extend(pred_max.view(-1))
                 min_preds.extend(pred_min.view(-1))
@@ -260,6 +267,7 @@ def validate(model, arch, val_loader, device):
                 losses.append(loss.item())
                 all_preds.extend(age_preds)
     
+    print(np.mean(losses))
     if arch == 'relnet':
         return np.mean(losses), {
             'sum': stack2np(sum_preds),
@@ -367,7 +375,7 @@ def main():
     checkpoint = torch.load(f"{checkpoint_dir}/best_model.pth", map_location=device)
     model.load_state_dict(checkpoint)
     
-    _, best_val_preds = validate(model, opts.arch, val_dataset, device)
+    _, best_val_preds = validate(model, opts.arch, val_loader, device)
     
     ## Save results so we can plot them later
 

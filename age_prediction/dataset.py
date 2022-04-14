@@ -75,25 +75,18 @@ class AgePredictionDataset(data.Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image = np.load(row['pkl_path'])
-        if self.fianet: # TODO: separate pkl file
-            factor = (96/130, 96/170, 96/120)
-            image = zoom(image, zoom=factor)
-            assert image.shape == (96,96,96)
-            image = image.astype(np.float32)
+        image = load_img(row, fianet=self.fianet)
+        if self.fianet:
+            ravens_image = load_ravens(row)
 
         if self.labeled:
             age = row['age']
             weight = self.weights[idx] if self.weights is not None else 1.
         
-        # TODO: pkl ravens image
-        if self.fianet:
-
-
         if self.fianet:
             return (image, ravens_image, age, weight) if self.labeled else (image, ravens_image)
         else:
-            return (image, age, weight) if self.labeled else image
+            return (image, age, weight) if self.labeled else (image)
 
     def __len__(self):
         return len(self.df)
