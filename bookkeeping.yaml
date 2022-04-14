@@ -48,12 +48,12 @@ glt:
     scale-down: 1994516
     inv: 1994517
     lds+inv: 1994519
-    fds+inv: 1994520
-    lds+fds+inv: 1994521
+    fds+inv: 1994672
+    lds+fds+inv: 1994682
     sqrt_inv: 1994522
     lds+sqrt_inv: 1994523
-    fds+sqrt_inv: 1994524
-    lds+fds+sqrt_inv: 1994525
+    fds+sqrt_inv: 1994692
+    lds+fds+sqrt_inv: 1994699
 relnet:
     baseline: 1994125
     over: 1994126

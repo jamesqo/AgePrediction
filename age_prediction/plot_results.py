@@ -13,10 +13,13 @@ RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 FIGURES_DIR = os.path.join(ROOT_DIR, "figures")
 
 def has_results(job_id):
-    result = os.path.isfile(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt") and \
-             os.path.isfile(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt") and \
-             os.path.isfile(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv") and \
-             os.path.isfile(f"{RESULTS_DIR}/{job_id}/config.json")
+    required_files = [
+        #f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt",
+        #f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt",
+        f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv",
+        f"{RESULTS_DIR}/{job_id}/config.json"
+    ]
+    result = all([os.path.isfile(f) for f in required_files])
     if not result:
         print(f"Job {job_id} is missing 1 or more required file(s), skipping")
     return result
@@ -44,29 +47,19 @@ def load_results():
 
     all_results = {}
     for job_id in job_ids:
-        train_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt")
-        val_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt")
+        #train_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt")
+        #val_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt")
         val_preds = pd.read_csv(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv")
         with open(f"{RESULTS_DIR}/{job_id}/config.json") as f:
             cfg = json.load(f)
         
         job_desc = describe_job(cfg)
         results = {}
-        results['train_losses'] = train_losses
-        results['val_losses'] = val_losses
+        #results['train_losses'] = train_losses
+        #results['val_losses'] = val_losses
         results['val_preds'] = val_preds
         results['config'] = cfg
         all_results[job_desc] = results
-
-        '''
-        # FDS feature results
-        if os.path.exists(f"{RESULTS_DIR}/{job_id}/train_df.csv"):
-            results['train_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_df.csv")
-            results['train_features_before_smoothing'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_features_before_smoothing.csv")
-            results['train_features_after_smoothing'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/train_features_after_smoothing.csv")
-            results['val_df'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_df.csv")
-            results['val_features'] = pd.read_csv(f"{RESULTS_DIR}/{job_id}/val_features.csv")
-        '''
     
     return all_results
 
@@ -174,10 +167,12 @@ def main():
 
     plt.rcParams.update({'font.family': 'C059'})
 
+    '''
     ## Plot losses over time
     for results in all_results.values():
         job_id = results['config']['job_id']
         plot_losses_over_time(results, f"losses_over_time_{job_id}.png")
+    '''
     
     ## Plot validation losses per bin
     for arch in ('resnet18', 'vgg8', 'sfcn', 'glt', 'relnet-sum', 'relnet-max', 'relnet-min'):
@@ -244,39 +239,6 @@ def main():
         plt.ylabel("Number of samples")
         plt.savefig(os.path.join(FIGURES_DIR, f"bin_counts_{dataset}.png"))
         plt.clf()
-
-    '''
-    ## Plot the mean of each feature dim for FDS jobs
-    for results in all_results.values():
-        job_id = results['config']['job_id']
-
-        if 'train_df' in results:
-            train_features_before_smoothing = results['train_features_before_smoothing']
-            train_features_after_smoothing = results['train_features_after_smoothing']
-            val_features = results['val_features']
-            train_df = results['train_df']
-            val_df = results['val_df']
-
-            for dim in range(20):
-                colname = f'feat{dim}'
-                bins = np.arange(18)
-                display_bins = [5*bin for bin in bins]
-                featvals1 = train_features_before_smoothing[colname]
-                y1 = [np.mean(featvals1[(train_df['age'] // 5) == bin]) for bin in bins]
-                featvals2 = train_features_after_smoothing[colname]
-                y2 = [np.mean(featvals2[(train_df['age'] // 5) == bin]) for bin in bins]
-                featvals3 = val_features[colname]
-                y3 = [np.mean(featvals3[(val_df['age'] // 5) == bin]) for bin in bins]
-
-                plt.plot(display_bins, y1, label='train, before smoothing')
-                plt.plot(display_bins, y2, label='train, after smoothing')
-                plt.plot(display_bins, y3, label='validation')
-                plt.title(f"Mean values for feature dim = {dim} per bin")
-                plt.xlabel("Age bin")
-                plt.ylabel("Mean value")
-                plt.savefig(os.path.join(FIGURES_DIR, f"mean_vals_{colname}_{job_id}.png"))
-                plt.clf()
-    '''
 
     print("Done")
 
