@@ -2,6 +2,7 @@ matplotlib
 nibabel
 numpy
 pandas
+pyyaml
 scikit-learn
 scipy
 torch==1.4.0

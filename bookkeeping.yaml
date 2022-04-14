@@ -1,0 +1,62 @@
+resnet18:
+    baseline: 1092513
+    over: 1179875
+    scale-up: 1189505
+    under: 1433520
+    scale-down: 1493010
+    inv: 1162629
+    lds+inv: 1162633
+    fds+inv: 1523371
+    lds+fds+inv: 1523374
+    sqrt_inv: 1162631
+    lds+sqrt_inv: 1162635
+    fds+sqrt_inv: 1523380
+    lds+fds+sqrt_inv: 1523381
+vgg8:
+    baseline: 1092514
+    over: 1179876
+    scale-up: 1189506
+    under: 1433521
+    scale-down: 1493230
+    inv: 1162630
+    lds+inv: 1162634
+    fds+inv: 1523375
+    lds+fds+inv: 1523376
+    sqrt_inv: 1162632
+    lds+sqrt_inv: 1162636
+    fds+sqrt_inv: 1523382
+    lds+fds+sqrt_inv: 1523383
+sfcn:
+    baseline: 1243141
+    over: 1349107
+    scale-up: 1349108
+    under: 1433522
+    scale-down: 1493231
+    inv: 1242582
+    lds+inv: 1242584
+    fds+inv: 1523378
+    lds+fds+inv: 1523379
+    sqrt_inv: 1242583
+    lds+sqrt_inv: 1242585
+    fds+sqrt_inv: 1523384
+    lds+fds+sqrt_inv: 1523385
+glt:
+    baseline: 1994513
+    over: 1994498
+    scale-up: 1994514
+    under: 1994515
+    scale-down: 1994516
+    inv: 1994517
+    lds+inv: 1994519
+    fds+inv: 1994520
+    lds+fds+inv: 1994521
+    sqrt_inv: 1994522
+    lds+sqrt_inv: 1994523
+    fds+sqrt_inv: 1994524
+    lds+fds+sqrt_inv: 1994525
+relnet:
+    baseline: 1994125
+    over: 1994126
+    scale-up: 1994127
+    under: 1994128
+    scale-down: 1994129

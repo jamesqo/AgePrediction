@@ -6,16 +6,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+import yaml
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 FIGURES_DIR = os.path.join(ROOT_DIR, "figures")
 
 def has_results(job_id):
-    return os.path.isfile(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt") and \
-           os.path.isfile(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt") and \
-           os.path.isfile(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv") and \
-           os.path.isfile(f"{RESULTS_DIR}/{job_id}/config.json")
+    result = os.path.isfile(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt") and \
+             os.path.isfile(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt") and \
+             os.path.isfile(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv") and \
+             os.path.isfile(f"{RESULTS_DIR}/{job_id}/config.json")
+    if not result:
+        print(f"Job {job_id} is missing 1 or more required file(s), skipping")
+    return result
 
 def describe_strat(cfg):
     if cfg['sample'] != 'none':
@@ -33,7 +37,9 @@ def describe_job(cfg):
     return describe_strat(cfg) + f" ({cfg['arch']})"
 
 def load_results():
-    job_ids = os.listdir(RESULTS_DIR)
+    with open(f"{ROOT_DIR}/bookkeeping.yaml", 'r') as f:
+        parsed_yaml = yaml.safe_load(f)
+    job_ids = [job_id for d in parsed_yaml.values() for job_id in d.values()]
     job_ids = list(filter(has_results, job_ids))
 
     all_results = {}
@@ -84,13 +90,13 @@ def plot_losses_over_time(results, fname):
     plt.close(fig)
 
 def plot_val_losses(all_results, arch, job_descs, fname):
-    if arch == 'relnet-sum':
-        pred_key = 'age_pred_sum'
-    elif arch == 'relnet-max':
-        pred_key = 'age_pred_max'
-    elif arch == 'relnet-min':
-        pred_key = 'age_pred_min'
+    if '-' in arch:
+        subname = arch[arch.index('-')+1:]
+        base_arch = arch[:arch.index('-')]
+        pred_key = f'age_pred_{subname}'
     else:
+        subname = None
+        base_arch = arch
         pred_key = 'age_pred'
 
     def mae(bin, df):
@@ -100,7 +106,15 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    display_arch = {'resnet18': "ResNet-18", 'vgg8': "VGG8", 'sfcn': "SFCN", 'glt': "GLT"}[arch]
+    display_arch = {
+        'resnet18': "ResNet-18",
+        'vgg8': "VGG8",
+        'sfcn': "SFCN",
+        'glt': "GLT",
+        'relnet-sum': "RelationNet-sum",
+        'relnet-max': "RelationNet-max",
+        'relnet-min': "RelationNet-min"
+    }[arch]
     ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
     ax.set_ylabel("MAE")
@@ -116,13 +130,14 @@ def plot_val_losses(all_results, arch, job_descs, fname):
 
     job_descs.insert(0, ('baseline', "Baseline", '#888888', '-'))
     for i, (desc, label, color, style) in enumerate(job_descs):
-        key = f"{desc} ({arch})"
-        if key not in all_results:
+        cfg = f"{desc} ({base_arch})"
+        if cfg not in all_results:
             continue
-        df = all_results[key]['val_preds']
+        display_cfg = f"{desc} ({arch})"
+        df = all_results[cfg]['val_preds']
 
         overall_mae = np.mean(np.abs(df['age'] - df[pred_key]))
-        print(f"Overall MAE for {key}: {overall_mae:.3f}")
+        print(f"Overall MAE for {display_cfg}: {overall_mae:.3f}")
 
         losses_per_bin = np.array([mae(bin, df) for bin in bins])
         
@@ -138,7 +153,7 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         ax.plot(display_bins, smoothed_losses, label=label, color=color, linestyle=style)
         
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
-        print(f"ρ for {key}: {pcorr:.3f}")
+        print(f"ρ for {display_cfg}: {pcorr:.3f}")
         anno_x = [15, 30, 45, 60, 75][i]
         anno_y = smoothed_losses[anno_x//5]-.5
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)

@@ -143,9 +143,9 @@ def train(model, arch, optimizer, train_loader, device, epoch):
             images, ages, weights = inst
             images, ages, weights = images.to(device), ages.to(device), weights.to(device)
         if is_3d:
-            images = images.unsqueeze(1)
+            images = images.unsqueeze(1) # Add a dimension for the number of channels
         if arch == 'fianet':
-            ravens_images = ravens_images.unsqueeze(1)
+            ravens_images = ravens_images.unsqueeze(1) # Add a dimension for the number of channels
 
         optimizer.zero_grad()
 
@@ -237,10 +237,17 @@ def validate(model, arch, val_loader, device):
     is_3d = arch in ('sfcn', 'relnet', 'fianet')
 
     with torch.no_grad():
-        for (images, ages, _) in val_loader:
-            images, ages = images.to(device), ages.to(device)
+        for inst in val_loader:
+            if arch == 'fianet':
+                images, ravens_images, ages, _ = inst
+                images, ravens_images, ages = images.to(device), ravens_images.to(device), ages.to(device)
+            else:
+                images, ages, _ = inst
+                images, ages = images.to(device), ages.to(device)
             if is_3d:
                 images = images.unsqueeze(1) # Add a dimension for the number of channels
+            if arch == 'fianet':
+                ravens_images = ravens_images.unsqueeze(1) # Add a dimension for the number of channels
             
             if arch == 'relnet':
                 outlist = model(images, images)
@@ -252,22 +259,19 @@ def validate(model, arch, val_loader, device):
                 loss = (sum_loss + max_loss + min_loss) / 3
                 losses.append(loss.item())
 
-                '''
-                for i in range(ages.size()[0]):
-                    print(f"gt {ages[i].item()} sum {pred_sum[i].item()} max {pred_max[i].item()} min {pred_min[i].item()}")
-                print(f"losses: sum {sum_loss.item()} max {max_loss.item()} min {min_loss.item()} total {loss.item()}")
-                '''
-
                 sum_preds.extend((pred_sum / 2).view(-1))
                 max_preds.extend(pred_max.view(-1))
                 min_preds.extend(pred_min.view(-1))
             else:
-                age_preds = model(images).view(-1)
+                if arch == 'fianet':
+                    age_preds = model(images, ravens_images)
+                else:
+                    age_preds = model(images)
+                age_preds = age_preds.view(-1)
                 loss = F.l1_loss(age_preds, ages, reduction='mean')
                 losses.append(loss.item())
                 all_preds.extend(age_preds)
     
-    print(np.mean(losses))
     if arch == 'relnet':
         return np.mean(losses), {
             'sum': stack2np(sum_preds),

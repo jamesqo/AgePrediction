@@ -216,4 +216,4 @@ class fusNet(nn.Module):
 		if self.training:
 			return [f1,f2,f3]
 		else:
-			return [f3]
+			return f3
