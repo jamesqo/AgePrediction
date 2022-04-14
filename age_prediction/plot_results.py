@@ -83,6 +83,9 @@ def plot_losses_over_time(results, fname):
     plt.close(fig)
 
 def plot_val_losses(all_results, arch, job_descs, fname):
+    MAXBIN = 17 # Maximum 5y age bin we're interested in (we ignore 90+)
+    BINSIZE = 5 # Width of each bin for plotting purposes
+
     if '-' in arch:
         subname = arch[arch.index('-')+1:]
         base_arch = arch[:arch.index('-')]
@@ -93,10 +96,11 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         pred_key = 'age_pred'
 
     def mae(bin, df):
-        subjects_in_bin = df[(df['age'] // 5) == bin]
+        subjects_in_bin = df[(df['age'] // BINSIZE) == bin]
         assert len(subjects_in_bin) > 0
         return np.mean(np.abs(subjects_in_bin['age'] - subjects_in_bin[pred_key]))
     
+    # Setup the plot axes
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
     display_arch = {
@@ -116,25 +120,28 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     ax2.set_ylabel("Number of samples")
     ax2.set_ylim(0, 250)
     
-    bins = np.arange(18)
-    display_bins = [5*bin for bin in bins]
-    df = list(all_results.values())[0]['val_preds']
-    bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
+    # Calculate bin counts of the val df (these should be the same across all models)
+    bins = np.arange(MAXBIN + 1)
+    display_bins = [bin*BINSIZE for bin in bins]
+    val_df = list(all_results.values())[0]['val_preds']
+    bin_counts = [sum((val_df['age'] // BINSIZE) == bin) for bin in bins]
 
-    job_descs.insert(0, ('baseline', "Baseline", '#888888', '-'))
+    job_descs.insert(0, ('baseline', "Baseline", '#888888', '-')) # Show the curve for the baseline model in every plot
     for i, (desc, label, color, style) in enumerate(job_descs):
         cfg = f"{desc} ({base_arch})"
         if cfg not in all_results:
+            print(f"Couldn't find {cfg} in results, skipping")
             continue
-        display_cfg = f"{desc} ({arch})"
-        df = all_results[cfg]['val_preds']
 
-        overall_mae = np.mean(np.abs(df['age'] - df[pred_key]))
+        display_cfg = f"{desc} ({arch})"
+        val_df = all_results[cfg]['val_preds']
+
+        # Calculate and print the MAE across all predictions
+        overall_mae = np.mean(np.abs(val_df['age'] - val_df[pred_key]))
         print(f"Overall MAE for {display_cfg}: {overall_mae:.3f}")
 
-        losses_per_bin = np.array([mae(bin, df) for bin in bins])
-        
-        # Smooth losses using a Gaussian kernel
+        # Smooth losses using a Gaussian kernel, and plot them
+        losses_per_bin = np.array([mae(bin, val_df) for bin in bins])
         smoothed_losses = np.zeros(losses_per_bin.shape)
         sigma = 1.
         for bin in bins:
@@ -145,16 +152,18 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         ax.set_xticks(display_bins)
         ax.plot(display_bins, smoothed_losses, label=label, color=color, linestyle=style)
         
+        # Calculate Pearson correlation between losses / bin counts and annotate the plot with it
         pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
         print(f"ρ for {display_cfg}: {pcorr:.3f}")
-        anno_x = [15, 30, 45, 60, 75][i]
-        anno_y = smoothed_losses[anno_x//5]-.5
+        anno_x = [15, 30, 45, 60, 75][i] # X location of annotation
+        anno_y = smoothed_losses[anno_x//BINSIZE]-.5 # Y location of annotation
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
 
         print()
     
+    # Add legend
     ax.legend()
-    bin_counts = [sum((df['age'] // 5) == bin) for bin in bins]
+    bin_counts = [sum((val_df['age'] // BINSIZE) == bin) for bin in bins]
     ax2.hist(display_bins, bins=display_bins, weights=bin_counts, color='#0f0f0f30')
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
