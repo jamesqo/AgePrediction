@@ -86,6 +86,16 @@
                 "--batch-size",
                 "1"
             ]
+        },
+        {
+            "name": "Plot Results",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceRoot}/age_prediction/plot_results.py",
+            "console": "integratedTerminal",
+            "python": "/home/ch225092/.conda/envs/james/bin/python",
+            "args": [
+            ]
         }
     ]
 }

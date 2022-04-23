@@ -246,17 +246,17 @@ def main():
         plot_val_losses(all_results, arch,
             [
                 ('inv', "Inverse weighting", 'red', '-'),
-                ('inv+lds', "Inverse weighting + LDS", 'royalblue', '-'),
-                ('inv+fds', "Inverse weighting + FDS", 'orange', '-'),
-                ('inv+lds+fds', "Inverse weighting + LDS + FDS", 'green', '-')
+                ('lds+inv', "Inverse weighting + LDS", 'royalblue', '-'),
+                ('fds+inv', "Inverse weighting + FDS", 'orange', '-'),
+                ('lds+fds+inv', "Inverse weighting + LDS + FDS", 'green', '-')
             ],
             f"val_losses_{arch}_reweighting_inv.png")
         plot_val_losses(all_results, arch,
             [
                 ('sqrt_inv', "Square-root inverse weighting", 'red', '-'),
-                ('sqrt_inv+lds', "Square-root inverse weighting + LDS", 'royalblue', '-'),
-                ('sqrt_inv+fds', "Square-root inverse weighting + FDS", 'orange', '-'),
-                ('sqrt_inv+lds+fds', "Square-root inverse weighting + LDS + FDS", 'green', '-')
+                ('lds+sqrt_inv', "Square-root inverse weighting + LDS", 'royalblue', '-'),
+                ('fds+sqrt_inv', "Square-root inverse weighting + FDS", 'orange', '-'),
+                ('lds+fds+sqrt_inv', "Square-root inverse weighting + LDS + FDS", 'green', '-')
             ],
             f"val_losses_{arch}_reweighting_sqrt_inv.png")
     
