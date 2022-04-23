@@ -40,26 +40,27 @@ def describe_job(cfg):
     return describe_strat(cfg) + f" ({cfg['arch']})"
 
 def load_results():
-    with open(f"{ROOT_DIR}/bookkeeping.yaml", 'r') as f:
-        parsed_yaml = yaml.safe_load(f)
-    job_ids = [job_id for d in parsed_yaml.values() for job_id in d.values()]
-    job_ids = list(filter(has_results, job_ids))
-
     all_results = {}
-    for job_id in job_ids:
-        #train_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/train_losses_over_time.txt")
-        #val_losses = np.loadtxt(f"{RESULTS_DIR}/{job_id}/val_losses_over_time.txt")
-        val_preds = pd.read_csv(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv")
-        with open(f"{RESULTS_DIR}/{job_id}/config.json") as f:
-            cfg = json.load(f)
-        
-        job_desc = describe_job(cfg)
-        results = {}
-        #results['train_losses'] = train_losses
-        #results['val_losses'] = val_losses
-        results['val_preds'] = val_preds
-        results['config'] = cfg
-        all_results[job_desc] = results
+
+    with open(f"{ROOT_DIR}/bookkeeping.yaml", 'r') as f:
+        jobs = yaml.safe_load(f)
+
+        for (arch, d) in jobs.items():
+            for (strat, job_id) in d.items():
+                if not has_results(job_id):
+                    continue
+
+                val_preds = pd.read_csv(f"{RESULTS_DIR}/{job_id}/best_model_val_preds.csv")
+                with open(f"{RESULTS_DIR}/{job_id}/config.json") as f:
+                    cfg = json.load(f)
+                
+                #job_desc = describe_job(cfg)
+                job_desc = f"{strat} ({arch})"
+                results = {
+                    'val_preds': val_preds,
+                    'cfg': cfg
+                }
+                all_results[job_desc] = results
     
     return all_results
 
@@ -82,9 +83,13 @@ def plot_losses_over_time(results, fname):
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
 
-def plot_val_losses(all_results, arch, job_descs, fname):
-    MAXBIN = 17 # Maximum 5y age bin we're interested in (we ignore 90+)
-    BINSIZE = 5 # Width of each bin for plotting purposes
+def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
+    MAX_BIN = 17 # Maximum 5y age bin we're interested in (we ignore patients aged 90+)
+    BIN_WIDTH = 5 # Width of each bin for plotting purposes
+    MAX_AGE = (MAX_BIN+1)*BIN_WIDTH - 1
+    TRAIN_VAL_RATIO = 4. # Ratio of training set size to validation set size (it was an 80%/20% split)
+
+    LOSS_MAX_BIN = 9
 
     if '-' in arch:
         subname = arch[arch.index('-')+1:]
@@ -95,8 +100,8 @@ def plot_val_losses(all_results, arch, job_descs, fname):
         base_arch = arch
         pred_key = 'age_pred'
 
-    def mae(bin, df):
-        subjects_in_bin = df[(df['age'] // BINSIZE) == bin]
+    def mae(bin, df, bin_width=BIN_WIDTH):
+        subjects_in_bin = df[(df['age'] // bin_width) == bin]
         assert len(subjects_in_bin) > 0
         return np.mean(np.abs(subjects_in_bin['age'] - subjects_in_bin[pred_key]))
     
@@ -117,54 +122,95 @@ def plot_val_losses(all_results, arch, job_descs, fname):
     ax.set_ylabel("MAE")
     ax.set_ylim(0, 15)
     #ax2.set_ylabel("Number of samples", rotation=270)
-    ax2.set_ylabel("Number of samples")
-    ax2.set_ylim(0, 250)
+    ax2.set_ylabel("Number of training samples")
+    ax2.set_ylim(0, 1000)
     
-    # Calculate bin counts of the val df (these should be the same across all models)
-    bins = np.arange(MAXBIN + 1)
-    display_bins = [bin*BINSIZE for bin in bins]
+    # Calculate the bin counts of the train df (this should be the same across all models)
+    bins = np.arange(MAX_BIN + 1)
+    display_bins = [bin*BIN_WIDTH for bin in bins]
+    display_bins_incl = display_bins + [MAX_AGE+1]
+    centroids = [db + (BIN_WIDTH/2) for db in display_bins]
     val_df = list(all_results.values())[0]['val_preds']
-    bin_counts = [sum((val_df['age'] // BINSIZE) == bin) for bin in bins]
+    train_bin_counts = [TRAIN_VAL_RATIO * sum((val_df['age'] // BIN_WIDTH) == bin) for bin in bins]
 
     job_descs.insert(0, ('baseline', "Baseline", '#888888', '-')) # Show the curve for the baseline model in every plot
     for i, (desc, label, color, style) in enumerate(job_descs):
         cfg = f"{desc} ({base_arch})"
+        display_cfg = f"{desc} ({arch})"
         if cfg not in all_results:
-            print(f"Couldn't find {cfg} in results, skipping")
+            print(f"Couldn't find {display_cfg} in results, skipping")
+            print("======")
             continue
 
-        display_cfg = f"{desc} ({arch})"
         val_df = all_results[cfg]['val_preds']
 
-        # Calculate and print the MAE across all predictions
+        # Calculate and print the val MAE across all predictions
         overall_mae = np.mean(np.abs(val_df['age'] - val_df[pred_key]))
         print(f"Overall MAE for {display_cfg}: {overall_mae:.3f}")
 
-        # Smooth losses using a Gaussian kernel, and plot them
-        losses_per_bin = np.array([mae(bin, val_df) for bin in bins])
-        smoothed_losses = np.zeros(losses_per_bin.shape)
+        # Smooth val losses using a Gaussian kernel, and plot them
+        val_losses_per_bin = np.array([mae(bin, val_df) for bin in bins])
+        smoothed_losses = np.zeros(val_losses_per_bin.shape)
         sigma = 1.
         for bin in bins:
             kernel = np.exp(-(bins - bin) ** 2 / (2 * sigma ** 2))
             kernel = kernel / sum(kernel)
-            smoothed_losses[bin] = sum(losses_per_bin * kernel)
+            smoothed_losses[bin] = sum(val_losses_per_bin * kernel)
 
-        ax.set_xticks(display_bins)
-        ax.plot(display_bins, smoothed_losses, label=label, color=color, linestyle=style)
+        ax.set_xticks(display_bins_incl)
+        ax.plot(centroids, smoothed_losses, label=label, color=color, linestyle=style)
+        ax.set_zorder(10)
+        ax.patch.set_alpha(0.)
         
-        # Calculate Pearson correlation between losses / bin counts and annotate the plot with it
-        pcorr, _ = stats.pearsonr(losses_per_bin, bin_counts)
+        # Calculate Pearson correlation between val losses / train bin counts (per 5y bin) and annotate the plot with it
+        pcorr, _ = stats.pearsonr(val_losses_per_bin, train_bin_counts)
         print(f"ρ for {display_cfg}: {pcorr:.3f}")
         anno_x = [15, 30, 45, 60, 75][i] # X location of annotation
-        anno_y = smoothed_losses[anno_x//BINSIZE]-.5 # Y location of annotation
+        anno_y = smoothed_losses[anno_x//BIN_WIDTH]-.5 # Y location of annotation
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
 
-        print()
+        # Calculate the validation loss per 1-year age bin.
+        # Group the losses themselves into 1y bins, and report their entropy.
+        val_bins_1y = [bin for bin in np.arange(MAX_AGE+1) if bin in set(val_df['age'] // 1)]
+        val_losses_per_1y_bin = np.array([mae(bin, val_df, bin_width=1) for bin in val_bins_1y])
+        val_loss_counts = {}
+        for loss_bin in range(LOSS_MAX_BIN+1):
+            val_loss_counts[loss_bin] = sum(
+                loss >= loss_bin and loss < (loss_bin+1) for loss in val_losses_per_1y_bin)
+        val_loss_counts[LOSS_MAX_BIN+1] = sum(loss >= (LOSS_MAX_BIN+1) for loss in val_losses_per_1y_bin)
+        n_losses = len(val_bins_1y)
+        ps = [count / n_losses for count in val_loss_counts.values()]
+        entropy = sum([0 if p == 0 else (-p * np.log(p)) for p in ps])
+        print(f"Entropy for {display_cfg}: {entropy:.3f}")
+
+        # Report the final criterion (MAE*entropy)
+        criterion = overall_mae*entropy
+        print(f"Criterion (=MAE*entropy) for {display_cfg}: {criterion:.3f}")
+
+        print("======")
     
     # Add legend
-    ax.legend()
-    bin_counts = [sum((val_df['age'] // BINSIZE) == bin) for bin in bins]
-    ax2.hist(display_bins, bins=display_bins, weights=bin_counts, color='#0f0f0f30')
+    l = ax.legend()
+    l.set_zorder(20)
+    x = display_bins
+    weights = train_bin_counts
+    color = '#0f0f0f30'
+    if sampling == 'under':
+        USAMP_LIMIT = 18
+        x = [x, x]
+        under_counts = [USAMP_LIMIT*5 for bin in bins]
+        under_counts[-1] = USAMP_LIMIT*3
+        weights = [weights, under_counts]
+        color = [color, 'pink']
+    elif sampling == 'over':
+        OSAMP_LIMIT = 126
+        x = [x, x]
+        over_counts = [OSAMP_LIMIT*5 for bin in bins]
+        over_counts[-1] = OSAMP_LIMIT*3
+        weights = [weights, over_counts]
+        color = [color, '#87cefa80']
+    ax2.hist(x, bins=display_bins_incl, weights=weights, color=color, stacked=False)
+
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
 
@@ -189,24 +235,28 @@ def main():
             [
                 ('under', "Undersampling", 'red', '-'),
                 ('scale-down', "Scaling down", 'red', '--'),
+            ],
+            f"val_losses_{arch}_undersampling.png", sampling='under')
+        plot_val_losses(all_results, arch,
+            [
                 ('over', "Oversampling", 'royalblue', '-'),
                 ('scale-up', "Scaling up", 'royalblue', '--')
             ],
-            f"val_losses_{arch}_resampling.png")
+            f"val_losses_{arch}_oversampling.png", sampling='over')
         plot_val_losses(all_results, arch,
             [
                 ('inv', "Inverse weighting", 'red', '-'),
-                ('inv + lds', "Inverse weighting + LDS", 'royalblue', '-'),
-                ('inv + fds', "Inverse weighting + FDS", 'orange', '-'),
-                ('inv + lds + fds', "Inverse weighting + LDS + FDS", 'green', '-')
+                ('inv+lds', "Inverse weighting + LDS", 'royalblue', '-'),
+                ('inv+fds', "Inverse weighting + FDS", 'orange', '-'),
+                ('inv+lds+fds', "Inverse weighting + LDS + FDS", 'green', '-')
             ],
             f"val_losses_{arch}_reweighting_inv.png")
         plot_val_losses(all_results, arch,
             [
                 ('sqrt_inv', "Square-root inverse weighting", 'red', '-'),
-                ('sqrt_inv + lds', "Square-root inverse weighting + LDS", 'royalblue', '-'),
-                ('sqrt_inv + fds', "Square-root inverse weighting + FDS", 'orange', '-'),
-                ('sqrt_inv + lds + fds', "Square-root inverse weighting + LDS + FDS", 'green', '-')
+                ('sqrt_inv+lds', "Square-root inverse weighting + LDS", 'royalblue', '-'),
+                ('sqrt_inv+fds', "Square-root inverse weighting + FDS", 'orange', '-'),
+                ('sqrt_inv+lds+fds', "Square-root inverse weighting + LDS + FDS", 'green', '-')
             ],
             f"val_losses_{arch}_reweighting_sqrt_inv.png")
     
@@ -217,7 +267,7 @@ def main():
     label_locs = np.arange(len(set(df['dataset']))) - 0.5
     plt.hist(df['dataset'], bins=label_locs)
     plt.title("Number of samples contributed by each dataset")
-    plt.xlabel("Dataset name")
+    plt.xlabel("Dataset")
     plt.ylabel("Number of samples")
     plt.savefig(os.path.join(FIGURES_DIR, 'dataset_counts.png'))
     plt.clf()
