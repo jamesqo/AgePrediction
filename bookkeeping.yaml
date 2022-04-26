@@ -60,3 +60,17 @@ relnet:
     scale-up: 1994127
     under: 1994128
     scale-down: 1994129
+3dt:
+    baseline: 2049547
+    over: 2053730
+    scale-up: 2053731
+    under: 2053732
+    scale-down: 2053733
+    inv: 2053735
+    lds+inv: 2053736
+    fds+inv: 2053737
+    lds+fds+inv: 2053738
+    sqrt_inv: 2053739
+    lds+sqrt_inv: 2053740
+    fds+sqrt_inv: 2053741
+    lds+fds+sqrt_inv: 2053742

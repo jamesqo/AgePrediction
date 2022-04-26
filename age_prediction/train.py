@@ -24,6 +24,7 @@ from .glt import GlobalLocalBrainAge
 from .RelationNet import CompaireLearning
 from .resnet import resnet18
 from .sfcn import SFCN
+from .Transformer3D import Cnn3DTransformer
 from .vgg import VGG8
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -35,7 +36,7 @@ print = logging.info
 def parse_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt', 'relnet', 'fianet'])
+    parser.add_argument('arch', type=str, choices=['resnet18', 'vgg8', 'sfcn', 'glt', 'relnet', 'fianet', '3dt'])
     parser.add_argument('--job-id', type=str, required=True, help='SLURM job ID')
 
     parser.add_argument('--batch-size', type=int, default=5, help='batch size')
@@ -107,6 +108,8 @@ def setup_model(arch, device, checkpoint_file=None, fds=None):
         # TODO: add FDS support
         model = fusNet(inplace=1, num_classes=1)
         model.uses_fds = False
+    elif arch == '3dt':
+        model = Cnn3DTransformer(in_dim=1, num_classes=1)
     else:
         raise Exception(f"Invalid arch: {arch}")
     if arch != 'fianet':
@@ -133,7 +136,7 @@ def train(model, arch, optimizer, train_loader, device, epoch):
     encodings = []
     targets = []
 
-    is_3d = arch in ('sfcn', 'relnet', 'fianet')
+    is_3d = arch in ('sfcn', 'relnet', 'fianet', '3dt')
 
     for batch_idx, inst in enumerate(train_loader):
         if arch == 'fianet':
@@ -234,7 +237,7 @@ def validate(model, arch, val_loader, device):
     else:
         all_preds = []
     
-    is_3d = arch in ('sfcn', 'relnet', 'fianet')
+    is_3d = arch in ('sfcn', 'relnet', 'fianet', '3dt')
 
     with torch.no_grad():
         for inst in val_loader:
@@ -292,7 +295,7 @@ def main():
 
     checkpoint_dir = os.path.join(ROOT_DIR, "checkpoints", opts.eval or opts.job_id)
     results_dir = os.path.join(ROOT_DIR, "results", opts.job_id)
-    
+
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
 

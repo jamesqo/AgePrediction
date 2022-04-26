@@ -115,7 +115,8 @@ def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
         'glt': "GLT",
         'relnet-sum': "RelationNet-sum",
         'relnet-max': "RelationNet-max",
-        'relnet-min': "RelationNet-min"
+        'relnet-min': "RelationNet-min",
+        '3dt': "3D Transformer"
     }[arch]
     ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
     ax.set_xlabel("Age bin")
@@ -230,7 +231,7 @@ def main():
     '''
     
     ## Plot validation losses per bin
-    for arch in ('resnet18', 'vgg8', 'sfcn', 'glt', 'relnet-sum', 'relnet-max', 'relnet-min'):
+    for arch in ('resnet18', 'vgg8', 'sfcn', 'glt', '3dt'):
         plot_val_losses(all_results, arch,
             [
                 ('under', "Undersampling", 'red', '-'),
