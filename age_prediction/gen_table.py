@@ -8,9 +8,7 @@ def display_arch(arch):
         'vgg8': "VGG8",
         'sfcn': "SFCN",
         'glt': "GLT",
-        'relnet-sum': "RelationNet-sum",
-        'relnet-max': "RelationNet-max",
-        'relnet-min': "RelationNet-min"
+        '3dt': "3D Transformer"
     }[arch]
 
 def display_strat(strat):
@@ -58,7 +56,7 @@ def main():
 
         d[arch][strat] = (overall_mae, rho, entropy, criterion)
 
-    for arch in ('resnet18', 'vgg8', 'glt', 'sfcn', 'relnet-sum', 'relnet-max', 'relnet-min'):
+    for arch in ('resnet18', 'vgg8', 'glt', 'sfcn', '3dt'):
         write_header(arch)
         for strat in ('baseline', 'under', 'scale-down', 'over', 'scale-up', 'inv', 'lds+inv', 'fds+inv', 'lds+fds+inv', 'sqrt_inv', 'lds+sqrt_inv', 'fds+sqrt_inv', 'lds+fds+sqrt_inv'):
             if strat not in d[arch]:

@@ -83,7 +83,7 @@ def plot_losses_over_time(results, fname):
     fig.savefig(f"{FIGURES_DIR}/{fname}")
     plt.close(fig)
 
-def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
+def plot_val_losses(all_results, arch, job_descs, fname, col, sampling=None):
     MAX_BIN = 17 # Maximum 5y age bin we're interested in (we ignore patients aged 90+)
     BIN_WIDTH = 5 # Width of each bin for plotting purposes
     MAX_AGE = (MAX_BIN+1)*BIN_WIDTH - 1
@@ -113,17 +113,23 @@ def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
         'vgg8': "VGG8",
         'sfcn': "SFCN",
         'glt': "GLT",
-        'relnet-sum': "RelationNet-sum",
-        'relnet-max': "RelationNet-max",
-        'relnet-min': "RelationNet-min",
         '3dt': "3D Transformer"
     }[arch]
-    ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
-    ax.set_xlabel("Age bin")
-    ax.set_ylabel("MAE")
+    #ax.set_title(f"Validation losses per 5-year age bin ({display_arch})")
+    include_xlabel = (arch == '3dt')
+    if include_xlabel:
+        ax.set_xlabel("Chronological age")
+        ax.xaxis.label.set_fontsize(15)
+    include_ylabel = (col == 'left')
+    if include_ylabel:
+        ax.set_ylabel("MAE per 5-year age bin")
+        ax.yaxis.label.set_fontsize(15)
     ax.set_ylim(0, 15)
     #ax2.set_ylabel("Number of samples", rotation=270)
-    ax2.set_ylabel("Number of training samples")
+    include_ylabel_2 = (col == 'right')
+    if include_ylabel_2:
+        ax2.set_ylabel("Number of training samples")
+        ax2.yaxis.label.set_fontsize(15)
     ax2.set_ylim(0, 1000)
     
     # Calculate the bin counts of the train df (this should be the same across all models)
@@ -159,16 +165,25 @@ def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
             smoothed_losses[bin] = sum(val_losses_per_bin * kernel)
 
         ax.set_xticks(display_bins_incl)
-        ax.plot(centroids, smoothed_losses, label=label, color=color, linestyle=style)
+
+        '''
+        # Set the font size for tick labels to 12
+        for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+            label.set_fontsize(12)
+        '''
+
+        ax.plot(centroids, smoothed_losses, label=label, color=color, linestyle=style, linewidth=3)
         ax.set_zorder(10)
         ax.patch.set_alpha(0.)
         
         # Calculate Pearson correlation between val losses / train bin counts (per 5y bin) and annotate the plot with it
         pcorr, _ = stats.pearsonr(val_losses_per_bin, train_bin_counts)
         print(f"ρ for {display_cfg}: {pcorr:.3f}")
+        '''
         anno_x = [15, 30, 45, 60, 75][i] # X location of annotation
         anno_y = smoothed_losses[anno_x//BIN_WIDTH]-.5 # Y location of annotation
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
+        '''
 
         # Calculate the validation loss per 1-year age bin.
         # Group the losses themselves into 1y bins, and report their entropy.
@@ -212,7 +227,7 @@ def plot_val_losses(all_results, arch, job_descs, fname, sampling=None):
         color = [color, '#87cefa80']
     ax2.hist(x, bins=display_bins_incl, weights=weights, color=color, stacked=False)
 
-    fig.savefig(f"{FIGURES_DIR}/{fname}")
+    fig.savefig(f"{FIGURES_DIR}/{fname}", dpi=300, pad_inches=0, bbox_inches='tight')
     plt.close(fig)
 
 def main():
@@ -237,13 +252,13 @@ def main():
                 ('under', "Undersampling", 'red', '-'),
                 ('scale-down', "Scaling down", 'red', '--'),
             ],
-            f"val_losses_{arch}_undersampling.png", sampling='under')
+            f"val_losses_{arch}_undersampling.png", col='left', sampling='under')
         plot_val_losses(all_results, arch,
             [
                 ('over', "Oversampling", 'royalblue', '-'),
                 ('scale-up', "Scaling up", 'royalblue', '--')
             ],
-            f"val_losses_{arch}_oversampling.png", sampling='over')
+            f"val_losses_{arch}_oversampling.png", col='right', sampling='over')
         plot_val_losses(all_results, arch,
             [
                 ('inv', "Inverse weighting", 'red', '-'),
@@ -251,7 +266,7 @@ def main():
                 ('fds+inv', "Inverse weighting + FDS", 'orange', '-'),
                 ('lds+fds+inv', "Inverse weighting + LDS + FDS", 'green', '-')
             ],
-            f"val_losses_{arch}_reweighting_inv.png")
+            f"val_losses_{arch}_reweighting_inv.png", col='left')
         plot_val_losses(all_results, arch,
             [
                 ('sqrt_inv', "Square-root inverse weighting", 'red', '-'),
@@ -259,7 +274,7 @@ def main():
                 ('fds+sqrt_inv', "Square-root inverse weighting + FDS", 'orange', '-'),
                 ('lds+fds+sqrt_inv', "Square-root inverse weighting + LDS + FDS", 'green', '-')
             ],
-            f"val_losses_{arch}_reweighting_sqrt_inv.png")
+            f"val_losses_{arch}_reweighting_sqrt_inv.png", col='right')
     
     ## Plot histograms for each dataset + the combined dataset
     path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")
