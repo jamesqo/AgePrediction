@@ -58,6 +58,8 @@ def load_samples(fold_fnames, min_bin_count=10, max_samples=None):
     if min_bin_count is not None:
         bin_counts = combined_df['agebin'].value_counts()
         bins_below_cutoff = [bin for bin in bin_counts.keys() if bin_counts[bin] < min_bin_count]
+        print(f"Removing age bins with <{min_bin_count} samples:")
+        print(bins_below_cutoff)
         combined_df = combined_df[~combined_df['agebin'].isin(bins_below_cutoff)]
     
     # Filter out files that don't exist
