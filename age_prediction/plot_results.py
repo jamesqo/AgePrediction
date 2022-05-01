@@ -91,6 +91,20 @@ def plot_val_losses(all_results, arch, job_descs, fname, col, sampling=None):
 
     LOSS_MAX_BIN = 9
 
+    """
+    Output is in the following format:
+    {
+        "<strategy>": {
+            "<loss_metric>": {
+                "overall_<loss_metric>": 1,
+                "entropy": 2,
+                "criterion": 3
+            }
+        }
+    }
+    """
+    res = {}
+
     if '-' in arch:
         subname = arch[arch.index('-')+1:]
         base_arch = arch[:arch.index('-')]
@@ -151,10 +165,6 @@ def plot_val_losses(all_results, arch, job_descs, fname, col, sampling=None):
 
         val_df = all_results[cfg]['val_preds']
 
-        # Calculate and print the val MAE across all predictions
-        overall_mae = np.mean(np.abs(val_df['age'] - val_df[pred_key]))
-        print(f"Overall MAE for {display_cfg}: {overall_mae:.3f}")
-
         # Smooth val losses using a Gaussian kernel, and plot them
         val_losses_per_bin = np.array([mae(bin, val_df) for bin in bins])
         smoothed_losses = np.zeros(val_losses_per_bin.shape)
@@ -175,33 +185,45 @@ def plot_val_losses(all_results, arch, job_descs, fname, col, sampling=None):
         ax.plot(centroids, smoothed_losses, label=label, color=color, linestyle=style, linewidth=3)
         ax.set_zorder(10)
         ax.patch.set_alpha(0.)
-        
+
+        '''        
         # Calculate Pearson correlation between val losses / train bin counts (per 5y bin) and annotate the plot with it
         pcorr, _ = stats.pearsonr(val_losses_per_bin, train_bin_counts)
         print(f"ρ for {display_cfg}: {pcorr:.3f}")
-        '''
         anno_x = [15, 30, 45, 60, 75][i] # X location of annotation
         anno_y = smoothed_losses[anno_x//BIN_WIDTH]-.5 # Y location of annotation
         ax.annotate(f"ρ = {pcorr:.3f}", (anno_x, anno_y), color=color)
         '''
 
-        # Calculate the validation loss per 1-year age bin.
-        # Group the losses themselves into 1y bins, and report their entropy.
-        val_bins_1y = [bin for bin in np.arange(MAX_AGE+1) if bin in set(val_df['age'] // 1)]
-        val_losses_per_1y_bin = np.array([mae(bin, val_df, bin_width=1) for bin in val_bins_1y])
-        val_loss_counts = {}
-        for loss_bin in range(LOSS_MAX_BIN+1):
-            val_loss_counts[loss_bin] = sum(
-                loss >= loss_bin and loss < (loss_bin+1) for loss in val_losses_per_1y_bin)
-        val_loss_counts[LOSS_MAX_BIN+1] = sum(loss >= (LOSS_MAX_BIN+1) for loss in val_losses_per_1y_bin)
-        n_losses = len(val_bins_1y)
-        ps = [count / n_losses for count in val_loss_counts.values()]
-        entropy = sum([0 if p == 0 else (-p * np.log(p)) for p in ps])
-        print(f"Entropy for {display_cfg}: {entropy:.3f}")
+        res[desc] = {}
+        for loss_metric in ('mae',):
+            res[desc][loss_metric] = {}
+            # Calculate and print the val MAE across all predictions
+            if loss_metric == 'mae':
+                val_losses = np.abs(val_df['age'] - val_df[pred_key])
+            elif loss_metric == 'mape':
+                val_losses = np.abs(
+                    (val_df['age'] - val_df[pred_key]) / (val_df['age'] + 1)
+                )
+            overall_loss = np.mean(val_losses)
+            print(f"Overall {loss_metric.upper()} for {display_cfg}: {overall_loss:.3f}")
+            res[desc][loss_metric][f"overall_{loss_metric}"] = overall_loss
 
-        # Report the final criterion (MAE*entropy)
-        criterion = overall_mae*entropy
-        print(f"Criterion (=MAE*entropy) for {display_cfg}: {criterion:.3f}")
+            # Group the losses themselves into 1y bins and report their entropy
+            val_loss_counts = {}
+            for loss_bin in range(LOSS_MAX_BIN+1):
+                val_loss_counts[loss_bin] = sum(
+                    loss >= loss_bin and loss < (loss_bin+1) for loss in val_losses)
+            val_loss_counts[LOSS_MAX_BIN+1] = sum(loss >= (LOSS_MAX_BIN+1) for loss in val_losses)
+            n_losses = len(val_losses)
+            ps = [count / n_losses for count in val_loss_counts.values()]
+            entropy = sum([0 if p == 0 else (-p * np.log(p)) for p in ps])
+            print(f"S_{loss_metric.upper()} for {display_cfg}: {entropy:.3f}")
+            res[desc][loss_metric]["entropy"] = entropy
+
+            criterion = overall_loss * entropy
+            print(f"Criterion = {loss_metric.upper()}*S_{loss_metric.upper()} for {display_cfg}: {criterion:.3f}")
+            res[desc][loss_metric]["criterion"] = criterion
 
         print("======")
     
@@ -230,6 +252,8 @@ def plot_val_losses(all_results, arch, job_descs, fname, col, sampling=None):
     fig.savefig(f"{FIGURES_DIR}/{fname}", dpi=300, pad_inches=0, bbox_inches='tight')
     plt.close(fig)
 
+    return res
+
 def main():
     shutil.rmtree(FIGURES_DIR)
     os.makedirs(FIGURES_DIR, exist_ok=True)
@@ -246,35 +270,41 @@ def main():
     '''
     
     ## Plot validation losses per bin
+    to_pkl = {}
     for arch in ('resnet18', 'vgg8', 'sfcn', 'glt', '3dt'):
-        plot_val_losses(all_results, arch,
+        d = {}
+        d.update(plot_val_losses(all_results, arch,
             [
                 ('under', "Undersampling", 'red', '-'),
                 ('scale-down', "Scaling down", 'red', '--'),
             ],
-            f"val_losses_{arch}_undersampling.png", col='left', sampling='under')
-        plot_val_losses(all_results, arch,
+            f"val_losses_{arch}_undersampling.png", col='left', sampling='under'))
+        d.update(plot_val_losses(all_results, arch,
             [
                 ('over', "Oversampling", 'royalblue', '-'),
                 ('scale-up', "Scaling up", 'royalblue', '--')
             ],
-            f"val_losses_{arch}_oversampling.png", col='right', sampling='over')
-        plot_val_losses(all_results, arch,
+            f"val_losses_{arch}_oversampling.png", col='right', sampling='over'))
+        d.update(plot_val_losses(all_results, arch,
             [
                 ('inv', "Inverse weighting", 'red', '-'),
                 ('lds+inv', "Inverse weighting + LDS", 'royalblue', '-'),
                 ('fds+inv', "Inverse weighting + FDS", 'orange', '-'),
                 ('lds+fds+inv', "Inverse weighting + LDS + FDS", 'green', '-')
             ],
-            f"val_losses_{arch}_reweighting_inv.png", col='left')
-        plot_val_losses(all_results, arch,
+            f"val_losses_{arch}_reweighting_inv.png", col='left'))
+        d.update(plot_val_losses(all_results, arch,
             [
                 ('sqrt_inv', "Square-root inverse weighting", 'red', '-'),
                 ('lds+sqrt_inv', "Square-root inverse weighting + LDS", 'royalblue', '-'),
                 ('fds+sqrt_inv', "Square-root inverse weighting + FDS", 'orange', '-'),
                 ('lds+fds+sqrt_inv', "Square-root inverse weighting + LDS + FDS", 'green', '-')
             ],
-            f"val_losses_{arch}_reweighting_sqrt_inv.png", col='right')
+            f"val_losses_{arch}_reweighting_sqrt_inv.png", col='right'))
+        to_pkl[arch] = d
+    
+    with open(os.path.join(RESULTS_DIR, "all_losses.json"), 'w+', encoding='utf8') as f:
+        f.write(json.dumps(to_pkl, indent=4, sort_keys=True))
     
     ## Plot histograms for each dataset + the combined dataset
     path = os.path.join(RESULTS_DIR, "sample-none", "merged_df.csv")

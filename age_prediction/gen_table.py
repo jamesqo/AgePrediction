@@ -2,13 +2,16 @@ import re
 import sys
 from collections import defaultdict
 
+import os
+import json
+
 def display_arch(arch):
     return {
-        'resnet18': "ResNet-18",
-        'vgg8': "VGG8",
+        'resnet18': "ResNet18",
+        'vgg8': "VGG",
         'sfcn': "SFCN",
-        'glt': "GLT",
-        '3dt': "3D Transformer"
+        'glt': "GL-Transformer",
+        '3dt': "mSFCN+Transformer"
     }[arch]
 
 def display_strat(strat):
@@ -28,41 +31,36 @@ def display_strat(strat):
         'lds+fds+sqrt_inv': 'SqInv + LDS + FDS'
     }[strat]
 
-def write_header(arch):
-    print(f"        \multirow{{13}}{{*}}{{{display_arch(arch)}}} \\\\")
-
-def write_results(strat, results):
-    print(f"        & {display_strat(strat)} & {results[0]} & {results[1]} & {results[2]} & {results[3]} \\\\ \\cline{{2-6}}")
+def to3f(fl):
+    return f"{fl:.3f}"
 
 def main():
-    input_file = sys.argv[1]
-    with open(input_file, 'r') as f:
-        to_parse = f.read()
+    arch = sys.argv[1]
+    mode = sys.argv[2]
+
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(f'{ROOT_DIR}/results/all_losses.json', 'r', encoding='utf8') as f:
+        results = json.load(f)
     
-    sections = to_parse.split('\n======\n')
-    d = defaultdict(dict)
-    for section in sections:
-        sec_lines = section.split('\n')
-        if len(sec_lines) != 4:
-            continue
+    if mode == 'rs':
+        strats = ['baseline', 'under', 'scale-down', 'over', 'scale-up']
+    elif mode == 'rw':
+        strats = ['baseline', 'inv', 'lds+inv', 'fds+inv', 'lds+fds+inv', 'sqrt_inv', 'lds+sqrt_inv', 'fds+sqrt_inv', 'lds+fds+sqrt_inv']
+    
+    ## Write header
+    print(f"\t&\\multirow{{3}}{{*}}{{{display_arch(arch)}}} & ", end='')
 
-        overall_mae = float(sec_lines[0].split(' ')[-1])
-        rho = float(sec_lines[1].split(' ')[-1])
-        entropy = float(sec_lines[2].split(' ')[-1])
-        criterion = float(sec_lines[3].split(' ')[-1])
+    ## Write MAEs
+    maes = [to3f(results[arch][strat]['mae']['overall_mae']) for strat in strats]
+    print(f"MAE & {' & '.join(maes)} \\\\")
 
-        m = re.match(r'.* for (.*) \((.*)\).*', sec_lines[0])
-        strat, arch = m[1], m[2]
+    ## Write entropies
+    entropies = [to3f(results[arch][strat]['mae']['entropy']) for strat in strats]
+    print(f"\t& &  $\\mathcal{{S}}$ & {' & '.join(entropies)} \\\\")
 
-        d[arch][strat] = (overall_mae, rho, entropy, criterion)
-
-    for arch in ('resnet18', 'vgg8', 'glt', 'sfcn', '3dt'):
-        write_header(arch)
-        for strat in ('baseline', 'under', 'scale-down', 'over', 'scale-up', 'inv', 'lds+inv', 'fds+inv', 'lds+fds+inv', 'sqrt_inv', 'lds+sqrt_inv', 'fds+sqrt_inv', 'lds+fds+sqrt_inv'):
-            if strat not in d[arch]:
-                continue
-            results = d[arch][strat]
-            write_results(strat, results)
+    ## Write criterions
+    criterions = [to3f(results[arch][strat]['mae']['criterion']) for strat in strats]
+    print(f"\t& &  MAE$\\cdot\\mathcal{{S}}$ & {' & '.join(criterions)} \\\\")
 
 if __name__ == '__main__':
     main()
